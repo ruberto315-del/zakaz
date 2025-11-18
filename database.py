@@ -1,10 +1,29 @@
 import asyncpg
-import aiosqlite
 from datetime import datetime
-from config import DATABASE_URL, DATABASE_NAME, USE_POSTGRES, ORDER_STATUSES
 import logging
+import os
 
 logger = logging.getLogger(__name__)
+
+# Визначаємо тип БД перед імпортом aiosqlite
+DATABASE_URL = os.getenv("DATABASE_URL")
+USE_POSTGRES = os.getenv("USE_POSTGRES", "true" if DATABASE_URL else "false").lower() == "true"
+
+# Умовний імпорт aiosqlite тільки для SQLite
+aiosqlite = None
+if not USE_POSTGRES:
+    try:
+        import aiosqlite
+    except ImportError:
+        logger.warning("aiosqlite не встановлено. Встановіть для використання SQLite: pip install aiosqlite")
+
+# Імпортуємо інші змінні з config
+from config import DATABASE_NAME, ORDER_STATUSES
+
+def _check_aiosqlite():
+    """Перевірити чи aiosqlite доступний"""
+    if aiosqlite is None:
+        raise ImportError("aiosqlite не встановлено. Встановіть для використання SQLite: pip install aiosqlite")
 
 class Database:
     def __init__(self):
@@ -126,6 +145,7 @@ class Database:
     
     async def _init_sqlite(self):
         """Ініціалізація SQLite (для локальної розробки)"""
+        _check_aiosqlite()
         async with aiosqlite.connect(self.db_name) as db:
             # Таблиця користувачів
             await db.execute("""
@@ -231,6 +251,7 @@ class Database:
                     ON CONFLICT (user_id) DO NOTHING
                 """, user_id, username, first_name)
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 await db.execute("""
                     INSERT OR IGNORE INTO users (user_id, username, first_name)
@@ -260,6 +281,7 @@ class Database:
                         WHERE user_id = ${param_num}
                     """, *params)
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 updates = []
                 params = []
@@ -286,6 +308,7 @@ class Database:
                     return dict(row)
                 return None
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cursor:
                     row = await cursor.fetchone()
@@ -312,6 +335,7 @@ class Database:
                 """, name, description, float(price), photo_id, category, is_preorder)
                 return product_id
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 cursor = await db.execute("""
                     INSERT INTO products (name, description, price, photo_id, category, is_preorder)
@@ -343,6 +367,7 @@ class Database:
                         p['price'] = float(p['price'])
                 return products
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 query = "SELECT * FROM products WHERE 1=1"
                 params = []
@@ -382,6 +407,7 @@ class Database:
                     return product
                 return None
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 async with db.execute("SELECT * FROM products WHERE id = ?", (product_id,)) as cursor:
                     row = await cursor.fetchone()
@@ -433,6 +459,7 @@ class Database:
                         WHERE id = ${param_num}
                     """, *params)
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 updates = []
                 params = []
@@ -479,6 +506,7 @@ class Database:
                         VALUES ($1, $2, $3)
                     """, user_id, product_id, quantity)
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 async with db.execute("""
                     SELECT id, quantity FROM cart 
@@ -520,6 +548,7 @@ class Database:
                     })
                 return cart_items
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 async with db.execute("""
                     SELECT c.id, c.product_id, c.quantity, p.name, p.price, p.photo_id
@@ -546,6 +575,7 @@ class Database:
             async with self.pool.acquire() as conn:
                 await conn.execute("DELETE FROM cart WHERE id = $1", cart_id)
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 await db.execute("DELETE FROM cart WHERE id = ?", (cart_id,))
                 await db.commit()
@@ -556,6 +586,7 @@ class Database:
             async with self.pool.acquire() as conn:
                 await conn.execute("DELETE FROM cart WHERE user_id = $1", user_id)
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 await db.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
                 await db.commit()
@@ -596,6 +627,7 @@ class Database:
                     await self.clear_cart(user_id)
                     return order_id
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 cart_items = await self.get_cart(user_id)
                 
@@ -632,6 +664,7 @@ class Database:
                     orders.append(order)
                 return orders
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 if user_id:
                     query = "SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC"
@@ -669,6 +702,7 @@ class Database:
                     return order
                 return None
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 async with db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)) as cursor:
                     row = await cursor.fetchone()
@@ -704,6 +738,7 @@ class Database:
                     items.append(item)
                 return items
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 async with db.execute("""
                     SELECT oi.*, p.name
@@ -733,6 +768,7 @@ class Database:
                     WHERE id = $2
                 """, status, order_id)
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 await db.execute("""
                     UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP
@@ -752,6 +788,7 @@ class Database:
                 """, user_id, product_id, quantity)
                 return preorder_id
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 cursor = await db.execute("""
                     INSERT INTO preorders (user_id, product_id, quantity)
@@ -788,6 +825,7 @@ class Database:
                     preorders.append(preorder)
                 return preorders
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 if user_id:
                     query = """
@@ -829,6 +867,7 @@ class Database:
             async with self.pool.acquire() as conn:
                 await conn.execute("UPDATE preorders SET status = $1 WHERE id = $2", status, preorder_id)
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 await db.execute("UPDATE preorders SET status = ? WHERE id = ?", (status, preorder_id))
                 await db.commit()
@@ -845,6 +884,7 @@ class Database:
                 """, question, answer, order_index)
                 return faq_id
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 cursor = await db.execute("""
                     INSERT INTO faq (question, answer, order_index)
@@ -860,6 +900,7 @@ class Database:
                 rows = await conn.fetch("SELECT * FROM faq ORDER BY order_index, id")
                 return [dict(row) for row in rows]
         else:
+            _check_aiosqlite()
             async with aiosqlite.connect(self.db_name) as db:
                 async with db.execute("SELECT * FROM faq ORDER BY order_index, id") as cursor:
                     rows = await cursor.fetchall()

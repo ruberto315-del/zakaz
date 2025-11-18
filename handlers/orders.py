@@ -184,7 +184,12 @@ async def process_receipt(message: Message, state: FSMContext):
                     photo_id, order_id
                 )
         else:
-            import aiosqlite
+            try:
+                import aiosqlite
+            except ImportError:
+                await message.answer("Помилка: aiosqlite не встановлено")
+                await state.clear()
+                return
             from config import DATABASE_NAME
             async with aiosqlite.connect(DATABASE_NAME) as conn:
                 await conn.execute(
