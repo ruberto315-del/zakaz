@@ -19,7 +19,10 @@ if not DATABASE_URL:
     PGHOST = os.getenv("RAILWAY_PRIVATE_DOMAIN") or os.getenv("PGHOST", "localhost")
     PGPORT = os.getenv("PGPORT", "5432")
     PGDATABASE = os.getenv("POSTGRES_DB") or os.getenv("PGDATABASE", "railway")
-    if PGPASSWORD and PGHOST != "localhost":
+    # Спробуємо створити DATABASE_URL якщо є всі необхідні змінні
+    if PGPASSWORD and PGHOST and PGHOST != "localhost":
+        DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
+    elif PGPASSWORD:  # Якщо є пароль, навіть якщо localhost, спробуємо підключитися
         DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
 
 # Визначаємо чи використовувати PostgreSQL
@@ -40,7 +43,22 @@ DATABASE_NAME = "shop_bot.db"  # Використовується тільки �
 try:
     import logging
     logger = logging.getLogger(__name__)
-    logger.info(f"Config: DATABASE_URL={'встановлено' if DATABASE_URL else 'не встановлено'}, USE_POSTGRES={USE_POSTGRES}")
+    # Логуємо тільки якщо DATABASE_URL не встановлено, щоб не показувати пароль
+    if DATABASE_URL:
+        logger.info(f"Config: DATABASE_URL встановлено, USE_POSTGRES={USE_POSTGRES}")
+    else:
+        logger.warning(f"Config: DATABASE_URL не встановлено, USE_POSTGRES={USE_POSTGRES}")
+        # Спробуємо показати які змінні є (без паролів)
+        pg_vars = {
+            "PGUSER": os.getenv("PGUSER"),
+            "POSTGRES_PASSWORD": "***" if os.getenv("POSTGRES_PASSWORD") else None,
+            "RAILWAY_PRIVATE_DOMAIN": os.getenv("RAILWAY_PRIVATE_DOMAIN"),
+            "PGHOST": os.getenv("PGHOST"),
+            "PGPORT": os.getenv("PGPORT"),
+            "POSTGRES_DB": os.getenv("POSTGRES_DB"),
+            "PGDATABASE": os.getenv("PGDATABASE"),
+        }
+        logger.warning(f"Доступні змінні PostgreSQL: {pg_vars}")
 except:
     pass
 
