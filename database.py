@@ -149,7 +149,12 @@ class Database:
     async def _init_sqlite(self):
         """Ініціалізація SQLite (для локальної розробки)"""
         _check_aiosqlite()
-        async with aiosqlite.connect(self.db_name) as db:
+        # Налаштування для уникнення блокування бази даних
+        async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+            # Увімкнути WAL режим для кращої продуктивності та уникнення блокувань
+            await db.execute("PRAGMA journal_mode=WAL")
+            await db.execute("PRAGMA busy_timeout=30000")
+            await db.execute("PRAGMA synchronous=NORMAL")
             # Таблиця користувачів
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -255,7 +260,8 @@ class Database:
                 """, user_id, username, first_name)
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 await db.execute("""
                     INSERT OR IGNORE INTO users (user_id, username, first_name)
                     VALUES (?, ?, ?)
@@ -285,7 +291,8 @@ class Database:
                     """, *params)
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 updates = []
                 params = []
                 if phone:
@@ -312,7 +319,8 @@ class Database:
                 return None
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 async with db.execute("SELECT * FROM users WHERE user_id = ?", (user_id,)) as cursor:
                     row = await cursor.fetchone()
                     if row:
@@ -339,7 +347,8 @@ class Database:
                 return product_id
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 cursor = await db.execute("""
                     INSERT INTO products (name, description, price, photo_id, category, is_preorder)
                     VALUES (?, ?, ?, ?, ?, ?)
@@ -371,7 +380,8 @@ class Database:
                 return products
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 query = "SELECT * FROM products WHERE 1=1"
                 params = []
                 if available_only:
@@ -411,7 +421,8 @@ class Database:
                 return None
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 async with db.execute("SELECT * FROM products WHERE id = ?", (product_id,)) as cursor:
                     row = await cursor.fetchone()
                     if row:
@@ -463,7 +474,8 @@ class Database:
                     """, *params)
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 updates = []
                 params = []
                 if name:
@@ -510,7 +522,8 @@ class Database:
                     """, user_id, product_id, quantity)
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 async with db.execute("""
                     SELECT id, quantity FROM cart 
                     WHERE user_id = ? AND product_id = ?
@@ -552,7 +565,8 @@ class Database:
                 return cart_items
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 async with db.execute("""
                     SELECT c.id, c.product_id, c.quantity, p.name, p.price, p.photo_id
                     FROM cart c
@@ -579,7 +593,8 @@ class Database:
                 await conn.execute("DELETE FROM cart WHERE id = $1", cart_id)
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 await db.execute("DELETE FROM cart WHERE id = ?", (cart_id,))
                 await db.commit()
     
@@ -590,7 +605,8 @@ class Database:
                 await conn.execute("DELETE FROM cart WHERE user_id = $1", user_id)
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 await db.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
                 await db.commit()
     
@@ -603,7 +619,8 @@ class Database:
                 async with self.pool.acquire() as conn:
                     await conn.execute("UPDATE cart SET quantity = $1 WHERE id = $2", quantity, cart_id)
             else:
-                async with aiosqlite.connect(self.db_name) as db:
+                async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                    await db.execute("PRAGMA busy_timeout=30000")
                     await db.execute("UPDATE cart SET quantity = ? WHERE id = ?", (quantity, cart_id))
                     await db.commit()
     
@@ -631,7 +648,8 @@ class Database:
                     return order_id
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 cart_items = await self.get_cart(user_id)
                 
                 cursor = await db.execute("""
@@ -668,7 +686,8 @@ class Database:
                 return orders
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 if user_id:
                     query = "SELECT * FROM orders WHERE user_id = ? ORDER BY created_at DESC"
                     params = (user_id,)
@@ -706,7 +725,8 @@ class Database:
                 return None
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 async with db.execute("SELECT * FROM orders WHERE id = ?", (order_id,)) as cursor:
                     row = await cursor.fetchone()
                     if row:
@@ -742,7 +762,8 @@ class Database:
                 return items
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 async with db.execute("""
                     SELECT oi.*, p.name
                     FROM order_items oi
@@ -772,7 +793,8 @@ class Database:
                 """, status, order_id)
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 await db.execute("""
                     UPDATE orders SET status = ?, updated_at = CURRENT_TIMESTAMP
                     WHERE id = ?
@@ -792,7 +814,8 @@ class Database:
                 return preorder_id
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 cursor = await db.execute("""
                     INSERT INTO preorders (user_id, product_id, quantity)
                     VALUES (?, ?, ?)
@@ -829,7 +852,8 @@ class Database:
                 return preorders
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 if user_id:
                     query = """
                         SELECT po.*, p.name, p.price
@@ -871,7 +895,8 @@ class Database:
                 await conn.execute("UPDATE preorders SET status = $1 WHERE id = $2", status, preorder_id)
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 await db.execute("UPDATE preorders SET status = ? WHERE id = ?", (status, preorder_id))
                 await db.commit()
     
@@ -888,7 +913,8 @@ class Database:
                 return faq_id
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 cursor = await db.execute("""
                     INSERT INTO faq (question, answer, order_index)
                     VALUES (?, ?, ?)
@@ -904,7 +930,8 @@ class Database:
                 return [dict(row) for row in rows]
         else:
             _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name) as db:
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
                 async with db.execute("SELECT * FROM faq ORDER BY order_index, id") as cursor:
                     rows = await cursor.fetchall()
                     faqs = []

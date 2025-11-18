@@ -68,11 +68,16 @@ async def process_phone(message: Message, state: FSMContext):
 @router.message(OrderStates.waiting_address)
 async def process_address(message: Message, state: FSMContext):
     """Обробити адресу"""
-    address = message.text.strip()
-    
-    if message.text == "/skip":
+    # Перевірка на команду /skip
+    if message.text and message.text.strip() == "/skip":
         user = await db.get_user(message.from_user.id)
         address = user.get('address') if user else None
+    else:
+        # Отримуємо адресу з повідомлення
+        if not message.text:
+            await message.answer("Будь ласка, введіть адресу доставки або надішліть /skip:")
+            return
+        address = message.text.strip()
     
     if not address:
         await message.answer("Будь ласка, введіть адресу доставки:")
@@ -84,22 +89,41 @@ async def process_address(message: Message, state: FSMContext):
     # Підрахувати загальну суму
     user_id = message.from_user.id
     cart_items = await db.get_cart(user_id)
+    
+    if not cart_items:
+        await message.answer("❌ Ваша корзина порожня. Додайте товари перед оформленням замовлення.")
+        await state.clear()
+        return
+    
     total = sum(item['price'] * item['quantity'] for item in cart_items)
     
     data = await state.get_data()
     phone = data.get('phone')
     
-    # Створити замовлення
-    order_id = await db.create_order(user_id, total, phone, address)
+    if not phone:
+        await message.answer("❌ Помилка: номер телефону не знайдено. Спробуйте оформити замовлення ще раз.")
+        await state.clear()
+        return
     
-    await message.answer(
-        f"✅ Замовлення #{order_id} створено!\n\n"
-        f"📞 Телефон: {phone}\n"
-        f"📍 Адреса: {address}\n"
-        f"💰 Сума: {total} грн\n\n"
-        "Оберіть спосіб оплати:",
-        reply_markup=get_payment_keyboard(order_id)
-    )
+    # Створити замовлення
+    try:
+        order_id = await db.create_order(user_id, total, phone, address)
+        
+        await message.answer(
+            f"✅ Замовлення #{order_id} створено!\n\n"
+            f"📞 Телефон: {phone}\n"
+            f"📍 Адреса: {address}\n"
+            f"💰 Сума: {total} грн\n\n"
+            "Оберіть спосіб оплати:",
+            reply_markup=get_payment_keyboard(order_id)
+        )
+    except Exception as e:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Помилка створення замовлення: {e}", exc_info=True)
+        await message.answer(
+            "❌ Помилка при створенні замовлення. Будь ласка, спробуйте ще раз або зверніться до адміністратора."
+        )
     
     await state.clear()
 

@@ -43,8 +43,9 @@ async def main_menu_callback(callback: CallbackQuery):
     """Повернення до головного меню через callback"""
     user_id = callback.from_user.id
     if user_id == ADMIN_ID:
-        await callback.message.edit_text("Головне меню:", reply_markup=get_admin_menu())
+        await callback.message.answer("Головне меню:", reply_markup=get_admin_menu())
     else:
-        await callback.message.edit_text("Головне меню:", reply_markup=get_main_menu())
+        await callback.message.answer("Головне меню:", reply_markup=get_main_menu())
+    await callback.message.delete()
     await callback.answer()
 
