@@ -5,20 +5,18 @@ import os
 
 logger = logging.getLogger(__name__)
 
-# Визначаємо тип БД перед імпортом aiosqlite
-DATABASE_URL = os.getenv("DATABASE_URL")
-USE_POSTGRES = os.getenv("USE_POSTGRES", "true" if DATABASE_URL else "false").lower() == "true"
-
-# Умовний імпорт aiosqlite тільки для SQLite
+# Умовний імпорт aiosqlite тільки для SQLite (спочатку встановлюємо None)
 aiosqlite = None
+
+# Імпортуємо змінні з config
+from config import DATABASE_NAME, ORDER_STATUSES, USE_POSTGRES, DATABASE_URL
+
+# Тепер імпортуємо aiosqlite тільки якщо потрібен SQLite
 if not USE_POSTGRES:
     try:
         import aiosqlite
     except ImportError:
         logger.warning("aiosqlite не встановлено. Встановіть для використання SQLite: pip install aiosqlite")
-
-# Імпортуємо інші змінні з config
-from config import DATABASE_NAME, ORDER_STATUSES
 
 def _check_aiosqlite():
     """Перевірити чи aiosqlite доступний"""
@@ -34,9 +32,14 @@ class Database:
     
     async def init_db(self):
         """Ініціалізація бази даних"""
+        logger.info(f"Ініціалізація БД: USE_POSTGRES={self.use_postgres}, DATABASE_URL={'встановлено' if self.db_url else 'не встановлено'}")
         if self.use_postgres:
+            if not self.db_url:
+                logger.error("USE_POSTGRES=True, але DATABASE_URL не встановлено! Перевірте змінні оточення.")
+                raise ValueError("DATABASE_URL не встановлено для PostgreSQL")
             await self._init_postgres()
         else:
+            logger.info("Використовується SQLite")
             await self._init_sqlite()
     
     async def _init_postgres(self):

@@ -24,8 +24,25 @@ if not DATABASE_URL:
 
 # Визначаємо чи використовувати PostgreSQL
 # Якщо DATABASE_URL встановлено, автоматично використовуємо PostgreSQL
-USE_POSTGRES = os.getenv("USE_POSTGRES", "true" if DATABASE_URL else "false").lower() == "true"
+# Якщо USE_POSTGRES явно встановлено в змінних оточення, використовуємо його
+USE_POSTGRES_ENV = os.getenv("USE_POSTGRES", "").lower()
+if USE_POSTGRES_ENV in ("true", "1", "yes"):
+    USE_POSTGRES = True
+elif USE_POSTGRES_ENV in ("false", "0", "no"):
+    USE_POSTGRES = False
+else:
+    # Автоматично визначаємо на основі DATABASE_URL
+    USE_POSTGRES = bool(DATABASE_URL)
+
 DATABASE_NAME = "shop_bot.db"  # Використовується тільки для SQLite
+
+# Логування для діагностики (тільки якщо є logging)
+try:
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Config: DATABASE_URL={'встановлено' if DATABASE_URL else 'не встановлено'}, USE_POSTGRES={USE_POSTGRES}")
+except:
+    pass
 
 # LiqPay налаштування (заповніть своїми даними)
 LIQPAY_PUBLIC_KEY = os.getenv("LIQPAY_PUBLIC_KEY", "")

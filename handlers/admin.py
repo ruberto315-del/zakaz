@@ -353,8 +353,9 @@ async def set_order_status(callback: CallbackQuery):
         status_text = ORDER_STATUSES.get(status, status)
         await callback.answer(f"Статус змінено на: {status_text}")
         
-        # Відправити сповіщення користувачу
-        await send_order_status_notification(order['user_id'], order_id, status)
+        # Відправити сповіщення користувачу (використовуємо bot з callback)
+        bot = callback.bot
+        await send_order_status_notification(bot, order['user_id'], order_id, status)
         
         # Оновити відображення
         await show_admin_order(callback)
