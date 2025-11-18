@@ -18,27 +18,31 @@ logger = logging.getLogger(__name__)
 
 async def main():
     """Головна функція"""
-    # Ініціалізація бота та диспетчера
-    bot = Bot(token=BOT_TOKEN)
-    dp = Dispatcher(storage=MemoryStorage())
-    
-    # Реєстрація роутерів
-    dp.include_router(common.router)
-    dp.include_router(catalog.router)
-    dp.include_router(cart.router)
-    dp.include_router(orders.router)
-    dp.include_router(preorders.router)
-    dp.include_router(admin.router)
-    dp.include_router(contact.router)
-    dp.include_router(faq.router)
-    
-    # Ініціалізація бази даних
-    await db.init_db()
-    logger.info("База даних ініціалізована")
-    
-    # Запуск бота
-    logger.info("Бот запущено")
-    await dp.start_polling(bot, skip_updates=True)
+    try:
+        # Ініціалізація бота та диспетчера
+        bot = Bot(token=BOT_TOKEN)
+        dp = Dispatcher(storage=MemoryStorage())
+        
+        # Реєстрація роутерів
+        dp.include_router(common.router)
+        dp.include_router(catalog.router)
+        dp.include_router(cart.router)
+        dp.include_router(orders.router)
+        dp.include_router(preorders.router)
+        dp.include_router(admin.router)
+        dp.include_router(contact.router)
+        dp.include_router(faq.router)
+        
+        # Ініціалізація бази даних
+        await db.init_db()
+        logger.info("База даних ініціалізована")
+        
+        # Запуск бота
+        logger.info("Бот запущено")
+        await dp.start_polling(bot, skip_updates=True)
+    finally:
+        # Закрити підключення до БД
+        await db.close()
 
 if __name__ == "__main__":
     try:

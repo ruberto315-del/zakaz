@@ -176,15 +176,22 @@ async def process_receipt(message: Message, state: FSMContext):
     # Оновити замовлення з фото чека
     order = await db.get_order(order_id)
     if order:
-        # Оновлюємо через SQL напряму
-        import aiosqlite
-        from config import DATABASE_NAME
-        async with aiosqlite.connect(DATABASE_NAME) as conn:
-            await conn.execute(
-                "UPDATE orders SET receipt_photo_id = ? WHERE id = ?",
-                (photo_id, order_id)
-            )
-            await conn.commit()
+        # Оновлюємо через метод бази даних
+        if db.use_postgres:
+            async with db.pool.acquire() as conn:
+                await conn.execute(
+                    "UPDATE orders SET receipt_photo_id = $1 WHERE id = $2",
+                    photo_id, order_id
+                )
+        else:
+            import aiosqlite
+            from config import DATABASE_NAME
+            async with aiosqlite.connect(DATABASE_NAME) as conn:
+                await conn.execute(
+                    "UPDATE orders SET receipt_photo_id = ? WHERE id = ?",
+                    (photo_id, order_id)
+                )
+                await conn.commit()
     
     await message.answer(
         "✅ Чек прикріплено до замовлення!\n\n"
