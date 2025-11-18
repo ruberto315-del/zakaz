@@ -1,0 +1,240 @@
+from aiogram import Router, F
+from aiogram.types import Message, CallbackQuery
+from aiogram.fsm.context import FSMContext
+from aiogram.fsm.state import State, StatesGroup
+from keyboards import get_orders_keyboard, get_payment_keyboard, get_main_menu
+from database import db
+from config import ORDER_STATUSES
+
+router = Router()
+
+class OrderStates(StatesGroup):
+    waiting_phone = State()
+    waiting_address = State()
+    waiting_receipt = State()
+
+@router.callback_query(F.data == "checkout")
+async def start_checkout(callback: CallbackQuery, state: FSMContext):
+    """Почати оформлення замовлення"""
+    user_id = callback.from_user.id
+    cart_items = await db.get_cart(user_id)
+    
+    if not cart_items:
+        await callback.answer("Корзина порожня", show_alert=True)
+        return
+    
+    user = await db.get_user(user_id)
+    
+    if user and user.get('phone'):
+        await callback.message.answer(
+            f"📞 Ваш номер телефону: {user['phone']}\n\n"
+            "Відправте новий номер телефону або натисніть /skip щоб залишити поточний:"
+        )
+    else:
+        await callback.message.answer(
+            "📞 Введіть ваш номер телефону для замовлення:"
+        )
+    
+    await state.set_state(OrderStates.waiting_phone)
+    await callback.answer()
+
+@router.message(OrderStates.waiting_phone)
+async def process_phone(message: Message, state: FSMContext):
+    """Обробити номер телефону"""
+    phone = message.text.strip()
+    
+    if message.text == "/skip":
+        user = await db.get_user(message.from_user.id)
+        phone = user.get('phone') if user else None
+    
+    if not phone:
+        await message.answer("Будь ласка, введіть номер телефону:")
+        return
+    
+    await state.update_data(phone=phone)
+    await db.update_user_data(message.from_user.id, phone=phone)
+    
+    user = await db.get_user(message.from_user.id)
+    if user and user.get('address'):
+        await message.answer(
+            f"📍 Ваша адреса: {user['address']}\n\n"
+            "Відправте нову адресу або натисніть /skip щоб залишити поточну:"
+        )
+    else:
+        await message.answer("📍 Введіть адресу доставки:")
+    
+    await state.set_state(OrderStates.waiting_address)
+
+@router.message(OrderStates.waiting_address)
+async def process_address(message: Message, state: FSMContext):
+    """Обробити адресу"""
+    address = message.text.strip()
+    
+    if message.text == "/skip":
+        user = await db.get_user(message.from_user.id)
+        address = user.get('address') if user else None
+    
+    if not address:
+        await message.answer("Будь ласка, введіть адресу доставки:")
+        return
+    
+    await state.update_data(address=address)
+    await db.update_user_data(message.from_user.id, address=address)
+    
+    # Підрахувати загальну суму
+    user_id = message.from_user.id
+    cart_items = await db.get_cart(user_id)
+    total = sum(item['price'] * item['quantity'] for item in cart_items)
+    
+    data = await state.get_data()
+    phone = data.get('phone')
+    
+    # Створити замовлення
+    order_id = await db.create_order(user_id, total, phone, address)
+    
+    await message.answer(
+        f"✅ Замовлення #{order_id} створено!\n\n"
+        f"📞 Телефон: {phone}\n"
+        f"📍 Адреса: {address}\n"
+        f"💰 Сума: {total} грн\n\n"
+        "Оберіть спосіб оплати:",
+        reply_markup=get_payment_keyboard(order_id)
+    )
+    
+    await state.clear()
+
+@router.message(F.text == "📦 Мої замовлення")
+async def show_orders(message: Message):
+    """Показати замовлення користувача"""
+    user_id = message.from_user.id
+    orders = await db.get_orders(user_id)
+    
+    if not orders:
+        await message.answer("📦 У вас немає замовлень")
+        return
+    
+    keyboard = get_orders_keyboard(orders)
+    await message.answer(
+        "📦 <b>Ваші замовлення:</b>",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+
+@router.callback_query(F.data.startswith("order_"))
+async def show_order(callback: CallbackQuery):
+    """Показати деталі замовлення"""
+    order_id = int(callback.data.split("_")[1])
+    order = await db.get_order(order_id)
+    
+    if not order:
+        await callback.answer("Замовлення не знайдено", show_alert=True)
+        return
+    
+    items = await db.get_order_items(order_id)
+    
+    status_text = ORDER_STATUSES.get(order['status'], order['status'])
+    
+    text = f"📦 <b>Замовлення #{order_id}</b>\n\n"
+    text += f"Статус: {status_text}\n"
+    text += f"📞 Телефон: {order['phone']}\n"
+    text += f"📍 Адреса: {order['address']}\n\n"
+    text += "<b>Товари:</b>\n"
+    
+    for item in items:
+        text += f"• {item['name']} - {item['quantity']} шт. × {item['price']} грн\n"
+    
+    text += f"\n<b>Загалом: {order['total_price']} грн</b>"
+    
+    await callback.message.edit_text(text, parse_mode="HTML")
+    await callback.answer()
+
+@router.callback_query(F.data.startswith("attach_receipt_"))
+async def attach_receipt(callback: CallbackQuery, state: FSMContext):
+    """Прикріпити чек"""
+    order_id = int(callback.data.split("_")[-1])
+    await state.update_data(order_id=order_id)
+    await state.set_state(OrderStates.waiting_receipt)
+    
+    await callback.message.answer(
+        "📸 Будь ласка, надішліть фото чека:"
+    )
+    await callback.answer()
+
+@router.message(OrderStates.waiting_receipt, F.photo)
+async def process_receipt(message: Message, state: FSMContext):
+    """Обробити чек"""
+    data = await state.get_data()
+    order_id = data.get('order_id')
+    
+    if not order_id:
+        await message.answer("Помилка. Спробуйте ще раз.")
+        await state.clear()
+        return
+    
+    photo_id = message.photo[-1].file_id
+    
+    # Оновити замовлення з фото чека
+    order = await db.get_order(order_id)
+    if order:
+        # Оновлюємо через SQL напряму
+        import aiosqlite
+        from config import DATABASE_NAME
+        async with aiosqlite.connect(DATABASE_NAME) as conn:
+            await conn.execute(
+                "UPDATE orders SET receipt_photo_id = ? WHERE id = ?",
+                (photo_id, order_id)
+            )
+            await conn.commit()
+    
+    await message.answer(
+        "✅ Чек прикріплено до замовлення!\n\n"
+        "Ваше замовлення буде оброблено найближчим часом."
+    )
+    
+    await state.clear()
+
+@router.callback_query(F.data.startswith("pay_liqpay_"))
+async def pay_liqpay(callback: CallbackQuery):
+    """Оплата через LiqPay"""
+    order_id = int(callback.data.split("_")[-1])
+    order = await db.get_order(order_id)
+    
+    if not order:
+        await callback.answer("Замовлення не знайдено", show_alert=True)
+        return
+    
+    try:
+        from liqpay_integration import create_payment_link
+        
+        payment_link = create_payment_link(
+            order_id=order_id,
+            amount=order['total_price'],
+            description="Оплата замовлення"
+        )
+        
+        if payment_link:
+            await callback.message.answer(
+                f"💳 <b>Оплата через LiqPay</b>\n\n"
+                f"Замовлення #{order_id}\n"
+                f"Сума: {order['total_price']} грн\n\n"
+                f"Перейдіть за посиланням для оплати:\n{payment_link}",
+                parse_mode="HTML"
+            )
+        else:
+            await callback.message.answer(
+                "💳 Оплата через LiqPay наразі недоступна.\n\n"
+                "Налаштуйте LiqPay в config.py або прикріпіть чек про оплату."
+            )
+    except ImportError:
+        await callback.message.answer(
+            "💳 Оплата через LiqPay буде доступна найближчим часом.\n\n"
+            "Наразі ви можете прикріпити чек про оплату."
+        )
+    except Exception as e:
+        await callback.message.answer(
+            f"Помилка при створенні платежу: {e}\n\n"
+            "Спробуйте прикріпити чек про оплату."
+        )
+    
+    await callback.answer()
+
