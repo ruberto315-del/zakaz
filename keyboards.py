@@ -129,7 +129,6 @@ def get_admin_orders_keyboard(orders):
             callback_data=f"admin_order_{order['id']}"
         ))
     
-    builder.add(InlineKeyboardButton(text="🔙 Адмін-панель", callback_data="admin_menu"))
     return builder.as_markup()
 
 def get_order_status_keyboard(order_id):
@@ -191,7 +190,6 @@ def get_admin_products_keyboard(products, page=0, per_page=5, action="edit"):
     if nav_buttons:
         builder.row(*nav_buttons)
     
-    builder.add(InlineKeyboardButton(text="🔙 Адмін-панель", callback_data="admin_menu"))
     return builder.as_markup()
 
 def get_payment_keyboard(order_id, admin_username=None):
