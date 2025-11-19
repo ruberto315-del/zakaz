@@ -65,9 +65,9 @@ async def show_product(callback: CallbackQuery):
     
     if product['photo_id']:
         await callback.message.delete()
-        # Перевіряємо чи це URL (починається з http) або file_id
+        # Перевіряємо чи це URL (для сумісності зі старими даними) або file_id
         if product['photo_id'].startswith('http'):
-            # Це URL з postimages.org
+            # Це URL (для сумісності зі старими даними)
             # Telegram не може отримати контент з деяких URL, тому скачуємо фото і відправляємо як файл
             try:
                 async with aiohttp.ClientSession() as session:
@@ -106,7 +106,7 @@ async def show_product(callback: CallbackQuery):
                     parse_mode="HTML"
                 )
         else:
-            # Це старий file_id (для сумісності)
+            # Це file_id від Telegram (основний варіант)
             await callback.message.answer_photo(
                 product['photo_id'],
                 caption=text,

@@ -81,21 +81,12 @@ async def process_product_photo(message: Message, state: FSMContext):
     photo_id = message.photo[-1].file_id
     data = await state.get_data()
     
-    # Завантажуємо фото на postimages.org
-    await message.answer("📤 Завантаження фото на сервер...")
-    from postimages_upload import upload_telegram_photo_to_postimages
-    photo_url = await upload_telegram_photo_to_postimages(message.bot, photo_id)
-    
-    if not photo_url:
-        await message.answer("❌ Помилка завантаження фото. Спробуйте ще раз.")
-        return
-    
-    # Зберігаємо посилання замість file_id
+    # Зберігаємо file_id від Telegram
     product_id = await db.add_product(
         name=data['name'],
         description=data['description'],
         price=data['price'],
-        photo_id=photo_url,  # Тепер це URL, а не file_id
+        photo_id=photo_id,  # Зберігаємо file_id від Telegram
         category=data.get('category')
     )
     
@@ -152,9 +143,9 @@ async def show_product_edit_options(callback: CallbackQuery):
     
     if product['photo_id']:
         await callback.message.delete()
-        # Перевіряємо чи це URL (починається з http) або file_id
+        # Перевіряємо чи це URL (для сумісності зі старими даними) або file_id
         if product['photo_id'].startswith('http'):
-            # Це URL з postimages.org, відправляємо через URL
+            # Це URL (для сумісності зі старими даними)
             await callback.message.answer_photo(
                 product['photo_id'],
                 caption=text,
@@ -162,7 +153,7 @@ async def show_product_edit_options(callback: CallbackQuery):
                 parse_mode="HTML"
             )
         else:
-            # Це старий file_id (для сумісності)
+            # Це file_id від Telegram
             await callback.message.answer_photo(
                 product['photo_id'],
                 caption=text,
@@ -232,21 +223,8 @@ async def process_edit_photo(message: Message, state: FSMContext):
     data = await state.get_data()
     product_id = data['product_id']
     
-    # Завантажуємо фото на postimages.org
-    await message.answer("📤 Завантаження фото на сервер...")
-    from postimages_upload import upload_telegram_photo_to_postimages
-    import logging
-    logger = logging.getLogger(__name__)
-    
-    photo_url = await upload_telegram_photo_to_postimages(message.bot, photo_id)
-    
-    if not photo_url:
-        # Якщо завантаження на postimages не вдалося, використовуємо file_id як резервний варіант
-        logger.warning(f"Не вдалося завантажити фото на postimages.org, використовуємо file_id: {photo_id}")
-        photo_url = photo_id  # Використовуємо file_id як резервний варіант
-    
-    # Зберігаємо посилання замість file_id (або file_id якщо завантаження не вдалося)
-    await db.update_product(product_id, photo_id=photo_url)  # Тепер це URL або file_id
+    # Зберігаємо file_id від Telegram
+    await db.update_product(product_id, photo_id=photo_id)
     await message.answer("✅ Фото оновлено!")
     await state.clear()
 
