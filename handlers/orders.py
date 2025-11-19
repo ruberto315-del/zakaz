@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from keyboards import get_orders_keyboard, get_payment_keyboard, get_main_menu
 from database import db
-from config import ORDER_STATUSES, ADMIN_ID
+from config import ORDER_STATUSES, ADMIN_ID, ADMIN_USERNAME
 
 router = Router()
 
@@ -115,13 +115,15 @@ async def process_address(message: Message, state: FSMContext):
         user = await db.get_user(user_id)
         
         # Відправити повідомлення користувачу
+        admin_username_display = ADMIN_USERNAME if ADMIN_USERNAME.startswith('@') else f"@{ADMIN_USERNAME}"
         await message.answer(
             f"✅ Замовлення #{order_id} створено!\n\n"
             f"📞 Телефон: {phone}\n"
             f"📍 Адреса: {address}\n"
             f"💰 Сума: {total} грн\n\n"
-            "Оберіть спосіб оплати:",
-            reply_markup=get_payment_keyboard(order_id)
+            f"📞 Для оплати та уточнення деталей зв'яжіться з адміністратором: {admin_username_display}\n\n"
+            "Або прикріпіть чек про оплату:",
+            reply_markup=get_payment_keyboard(order_id, ADMIN_USERNAME)
         )
         
         # Відправити повідомлення адміністратору
@@ -251,6 +253,38 @@ async def process_receipt(message: Message, state: FSMContext):
                     (photo_id, order_id)
                 )
                 await conn.commit()
+        
+        # Відправити чек адміністратору
+        bot = message.bot
+        order_items = await db.get_order_items(order_id)
+        user = await db.get_user(order['user_id'])
+        
+        admin_text = f"📸 <b>Чек для замовлення #{order_id}</b>\n\n"
+        admin_text += f"👤 <b>Користувач:</b>\n"
+        admin_text += f"   ID: {order['user_id']}\n"
+        if user:
+            admin_text += f"   Ім'я: {user.get('first_name', 'Не вказано')}\n"
+            if user.get('username'):
+                admin_text += f"   @{user['username']}\n"
+        admin_text += f"\n📞 <b>Телефон:</b> {order['phone']}\n"
+        admin_text += f"📍 <b>Адреса:</b> {order['address']}\n\n"
+        admin_text += f"<b>Товари:</b>\n"
+        for item in order_items:
+            admin_text += f"• {item['name']} - {item['quantity']} шт. × {item['price']} грн\n"
+        admin_text += f"\n💰 <b>Загалом: {order['total_price']} грн</b>"
+        
+        try:
+            # Відправляємо фото з описом адміну
+            await bot.send_photo(
+                ADMIN_ID,
+                photo_id,
+                caption=admin_text,
+                parse_mode="HTML"
+            )
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Помилка відправки чека адміну: {e}")
     
     await message.answer(
         "✅ Чек прикріплено до замовлення!\n\n"
@@ -259,48 +293,4 @@ async def process_receipt(message: Message, state: FSMContext):
     
     await state.clear()
 
-@router.callback_query(F.data.startswith("pay_liqpay_"))
-async def pay_liqpay(callback: CallbackQuery):
-    """Оплата через LiqPay"""
-    order_id = int(callback.data.split("_")[-1])
-    order = await db.get_order(order_id)
-    
-    if not order:
-        await callback.answer("Замовлення не знайдено", show_alert=True)
-        return
-    
-    try:
-        from liqpay_integration import create_payment_link
-        
-        payment_link = create_payment_link(
-            order_id=order_id,
-            amount=order['total_price'],
-            description="Оплата замовлення"
-        )
-        
-        if payment_link:
-            await callback.message.answer(
-                f"💳 <b>Оплата через LiqPay</b>\n\n"
-                f"Замовлення #{order_id}\n"
-                f"Сума: {order['total_price']} грн\n\n"
-                f"Перейдіть за посиланням для оплати:\n{payment_link}",
-                parse_mode="HTML"
-            )
-        else:
-            await callback.message.answer(
-                "💳 Оплата через LiqPay наразі недоступна.\n\n"
-                "Налаштуйте LiqPay в config.py або прикріпіть чек про оплату."
-            )
-    except ImportError:
-        await callback.message.answer(
-            "💳 Оплата через LiqPay буде доступна найближчим часом.\n\n"
-            "Наразі ви можете прикріпити чек про оплату."
-        )
-    except Exception as e:
-        await callback.message.answer(
-            f"Помилка при створенні платежу: {e}\n\n"
-            "Спробуйте прикріпити чек про оплату."
-        )
-    
-    await callback.answer()
 

@@ -9,6 +9,9 @@ BOT_TOKEN = os.getenv("BOT_TOKEN", "8264290134:AAGdDjDFrwYxrrHqDw3Fbj1FjwGg9g30M
 # ID адміністратора
 ADMIN_ID = int(os.getenv("ADMIN_ID", "810944378"))
 
+# Username адміністратора для зв'язку
+ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "testusername")
+
 # Підключення до PostgreSQL
 # Railway надає DATABASE_URL або окремі змінні
 DATABASE_URL = os.getenv("DATABASE_URL")

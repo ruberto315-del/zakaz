@@ -176,10 +176,13 @@ def get_admin_products_keyboard(products):
     builder.add(InlineKeyboardButton(text="🔙 Адмін-панель", callback_data="admin_menu"))
     return builder.as_markup()
 
-def get_payment_keyboard(order_id):
+def get_payment_keyboard(order_id, admin_username=None):
     """Клавіатура оплати"""
     builder = InlineKeyboardBuilder()
-    builder.add(InlineKeyboardButton(text="💳 Оплатити через LiqPay", callback_data=f"pay_liqpay_{order_id}"))
+    if admin_username:
+        # Видаляємо @ якщо є
+        username_clean = admin_username.lstrip('@')
+        builder.add(InlineKeyboardButton(text="📞 Зв'язатися з адміном", url=f"https://t.me/{username_clean}"))
     builder.add(InlineKeyboardButton(text="📸 Прикріпити чек", callback_data=f"attach_receipt_{order_id}"))
     builder.add(InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu"))
     builder.adjust(1)
