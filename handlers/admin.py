@@ -356,10 +356,20 @@ async def confirm_delete_product(callback: CallbackQuery):
     # Видаляємо товар
     await db.delete_product(product_id)
     
-    await callback.message.edit_text(
-        f"✅ Товар <b>{product['name']}</b> успішно видалено!",
-        parse_mode="HTML"
-    )
+    # Перевіряємо чи повідомлення містить фото
+    if callback.message.photo:
+        # Якщо є фото, видаляємо повідомлення і відправляємо нове
+        await callback.message.delete()
+        await callback.message.answer(
+            f"✅ Товар <b>{product['name']}</b> успішно видалено!",
+            parse_mode="HTML"
+        )
+    else:
+        # Якщо немає фото, редагуємо текст
+        await callback.message.edit_text(
+            f"✅ Товар <b>{product['name']}</b> успішно видалено!",
+            parse_mode="HTML"
+        )
     
     # Показуємо список товарів
     products = await db.get_products(available_only=False)
