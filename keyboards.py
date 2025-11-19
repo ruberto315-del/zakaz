@@ -22,8 +22,8 @@ def get_admin_menu():
     builder.add(KeyboardButton(text="➕ Додати товар"))
     builder.add(KeyboardButton(text="📝 Редагувати товар"))
     builder.add(KeyboardButton(text="🗑️ Видалити товар"))
+    builder.add(KeyboardButton(text="🛍️ Переглянути товари"))
     builder.add(KeyboardButton(text="📊 Замовлення"))
-    builder.add(KeyboardButton(text="📋 Предзакази"))
     builder.adjust(2, 2, 1)
     return builder.as_markup(resize_keyboard=True)
 

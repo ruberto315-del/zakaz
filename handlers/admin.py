@@ -117,6 +117,25 @@ async def cancel_add_product(callback: CallbackQuery, state: FSMContext):
     await callback.message.edit_text("❌ Додавання товару скасовано.")
     await callback.answer("Додавання скасовано")
 
+@router.message(F.text == "🛍️ Переглянути товари")
+async def show_all_products(message: Message):
+    """Показати всі товари для перегляду"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    products = await db.get_products(available_only=False)
+    
+    if not products:
+        await message.answer("Товарів не знайдено")
+        return
+    
+    keyboard = get_admin_products_keyboard(products, page=0, action="view")
+    await message.answer(
+        "🛍️ <b>Всі товари:</b>",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+
 @router.message(F.text == "📝 Редагувати товар")
 async def show_products_for_edit(message: Message):
     """Показати товари для редагування"""
@@ -169,9 +188,15 @@ async def admin_products_page(callback: CallbackQuery):
     products = await db.get_products(available_only=False)
     keyboard = get_admin_products_keyboard(products, page=page, action=action)
     
-    action_text = "редагування" if action == "edit" else "видалення"
+    action_texts = {
+        "edit": "редагування",
+        "delete": "видалення",
+        "view": "перегляду"
+    }
+    action_text = action_texts.get(action, "перегляду")
+    emoji = "📝" if action == "edit" else "🗑️" if action == "delete" else "🛍️"
     await callback.message.edit_text(
-        f"📝 <b>Оберіть товар для {action_text}:</b>",
+        f"{emoji} <b>Оберіть товар для {action_text}:</b>",
         reply_markup=keyboard,
         parse_mode="HTML"
     )
@@ -192,6 +217,39 @@ async def show_product_edit_options(callback: CallbackQuery):
     
     if not product:
         await callback.answer("Товар не знайдено", show_alert=True)
+        return
+    
+    if action == "view":
+        # Просто перегляд товару
+        text = f"🛍️ <b>{product['name']}</b>\n\n"
+        if product['description']:
+            text += f"{product['description']}\n\n"
+        text += f"💰 Ціна: <b>{product['price']} грн</b>\n"
+        text += f"Доступність: {'✅' if product['is_available'] else '❌'}\n"
+        if product.get('category'):
+            text += f"Категорія: {product['category']}\n"
+        
+        builder = InlineKeyboardBuilder()
+        builder.add(InlineKeyboardButton(text="🔙 До товарів", callback_data="admin_products_page_0_view"))
+        builder.adjust(1)
+        
+        if product['photo_id'] and not product['photo_id'].startswith('http'):
+            await callback.message.delete()
+            try:
+                await callback.message.answer_photo(
+                    product['photo_id'],
+                    caption=text,
+                    reply_markup=builder.as_markup(),
+                    parse_mode="HTML"
+                )
+            except Exception as e:
+                logger.error(f"Помилка відправки фото: {e}")
+                await callback.message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+        else:
+            if callback.message.photo:
+                await callback.message.delete()
+            await callback.message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+        await callback.answer()
         return
     
     if action == "delete":
