@@ -2,6 +2,7 @@ import asyncpg
 from datetime import datetime
 import logging
 import os
+from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +28,17 @@ class Database:
     def __init__(self):
         self.use_postgres = USE_POSTGRES
         self.db_url = DATABASE_URL if USE_POSTGRES else None
-        self.db_name = DATABASE_NAME
+        # Використовуємо абсолютний шлях для SQLite, щоб база завжди була в одному місці
+        if not USE_POSTGRES:
+            # Отримуємо абсолютний шлях до файлу бази даних
+            db_path = Path(DATABASE_NAME)
+            if not db_path.is_absolute():
+                # Якщо відносний шлях, робимо його абсолютним відносно поточної робочої директорії
+                self.db_name = str(db_path.absolute())
+            else:
+                self.db_name = DATABASE_NAME
+        else:
+            self.db_name = DATABASE_NAME
         self.pool = None
     
     async def init_db(self):
@@ -182,6 +193,8 @@ class Database:
             await db.execute("PRAGMA journal_mode=WAL")
             await db.execute("PRAGMA busy_timeout=30000")
             await db.execute("PRAGMA synchronous=NORMAL")
+            # Увімкнути foreign keys
+            await db.execute("PRAGMA foreign_keys=ON")
             # Таблиця користувачів
             await db.execute("""
                 CREATE TABLE IF NOT EXISTS users (
@@ -300,7 +313,9 @@ class Database:
                 )
             """)
             
+            # Явно комітимо всі зміни
             await db.commit()
+            logger.info(f"SQLite база даних ініціалізована: {self.db_name}")
     
     # Користувачі
     async def add_user(self, user_id, username=None, first_name=None):
@@ -403,12 +418,15 @@ class Database:
             _check_aiosqlite()
             async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
                 await db.execute("PRAGMA busy_timeout=30000")
+                await db.execute("PRAGMA foreign_keys=ON")
                 cursor = await db.execute("""
                     INSERT INTO products (name, description, price, photo_id, category, is_preorder)
                     VALUES (?, ?, ?, ?, ?, ?)
                 """, (name, description, price, photo_id, category, is_preorder))
                 await db.commit()
-                return cursor.lastrowid
+                product_id = cursor.lastrowid
+                logger.info(f"Товар додано в SQLite: ID={product_id}, name={name}, DB={self.db_name}")
+                return product_id
     
     async def get_products(self, category=None, available_only=True):
         """Отримати товари"""
@@ -431,6 +449,7 @@ class Database:
                 for p in products:
                     if 'price' in p and hasattr(p['price'], '__float__'):
                         p['price'] = float(p['price'])
+                logger.debug(f"Отримано {len(products)} товарів з PostgreSQL")
                 return products
         else:
             _check_aiosqlite()
@@ -460,6 +479,7 @@ class Database:
                             'is_preorder': row[7],
                             'created_at': row[8]
                         })
+                    logger.debug(f"Отримано {len(products)} товарів з SQLite (DB={self.db_name})")
                     return products
     
     async def get_product(self, product_id):
