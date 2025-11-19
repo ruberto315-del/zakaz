@@ -1,10 +1,10 @@
-from aiogram import Router, F
+from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from keyboards import get_orders_keyboard, get_payment_keyboard, get_main_menu
 from database import db
-from config import ORDER_STATUSES
+from config import ORDER_STATUSES, ADMIN_ID
 
 router = Router()
 
@@ -109,6 +109,12 @@ async def process_address(message: Message, state: FSMContext):
     try:
         order_id = await db.create_order(user_id, total, phone, address)
         
+        # Отримати деталі замовлення для відправки адміну
+        order = await db.get_order(order_id)
+        order_items = await db.get_order_items(order_id)
+        user = await db.get_user(user_id)
+        
+        # Відправити повідомлення користувачу
         await message.answer(
             f"✅ Замовлення #{order_id} створено!\n\n"
             f"📞 Телефон: {phone}\n"
@@ -117,6 +123,30 @@ async def process_address(message: Message, state: FSMContext):
             "Оберіть спосіб оплати:",
             reply_markup=get_payment_keyboard(order_id)
         )
+        
+        # Відправити повідомлення адміністратору
+        bot = message.bot
+        admin_text = f"🆕 <b>Нове замовлення #{order_id}</b>\n\n"
+        admin_text += f"👤 <b>Користувач:</b>\n"
+        admin_text += f"   ID: {user_id}\n"
+        if user:
+            admin_text += f"   Ім'я: {user.get('first_name', 'Не вказано')}\n"
+            if user.get('username'):
+                admin_text += f"   @{user['username']}\n"
+        admin_text += f"\n📞 <b>Телефон:</b> {phone}\n"
+        admin_text += f"📍 <b>Адреса:</b> {address}\n\n"
+        admin_text += f"<b>Товари:</b>\n"
+        for item in order_items:
+            admin_text += f"• {item['name']} - {item['quantity']} шт. × {item['price']} грн\n"
+        admin_text += f"\n💰 <b>Загалом: {total} грн</b>"
+        
+        try:
+            await bot.send_message(ADMIN_ID, admin_text, parse_mode="HTML")
+        except Exception as e:
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"Помилка відправки повідомлення адміну: {e}")
+        
     except Exception as e:
         import logging
         logger = logging.getLogger(__name__)

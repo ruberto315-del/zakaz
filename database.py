@@ -652,17 +652,28 @@ class Database:
                 await db.execute("DELETE FROM cart WHERE id = ?", (cart_id,))
                 await db.commit()
     
-    async def clear_cart(self, user_id):
-        """Очистити корзину"""
+    async def clear_cart(self, user_id, connection=None):
+        """Очистити корзину
+        
+        Args:
+            user_id: ID користувача
+            connection: Опціональне існуюче з'єднання (для транзакцій)
+        """
         if self.use_postgres:
-            async with self.pool.acquire() as conn:
-                await conn.execute("DELETE FROM cart WHERE user_id = $1", user_id)
+            if connection:
+                await connection.execute("DELETE FROM cart WHERE user_id = $1", user_id)
+            else:
+                async with self.pool.acquire() as conn:
+                    await conn.execute("DELETE FROM cart WHERE user_id = $1", user_id)
         else:
-            _check_aiosqlite()
-            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
-                await db.execute("PRAGMA busy_timeout=30000")
-                await db.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
-                await db.commit()
+            if connection:
+                await connection.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
+            else:
+                _check_aiosqlite()
+                async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                    await db.execute("PRAGMA busy_timeout=30000")
+                    await db.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
+                    await db.commit()
     
     async def update_cart_quantity(self, cart_id, quantity):
         """Оновити кількість товару в корзині"""
@@ -686,6 +697,9 @@ class Database:
                 async with conn.transaction():
                     cart_items = await self.get_cart(user_id)
                     
+                    if not cart_items:
+                        raise ValueError("Корзина порожня")
+                    
                     order_id = await conn.fetchval("""
                         INSERT INTO orders (user_id, total_price, phone, address, receipt_photo_id)
                         VALUES ($1, $2, $3, $4, $5)
@@ -698,13 +712,17 @@ class Database:
                             VALUES ($1, $2, $3, $4)
                         """, order_id, item['product_id'], item['quantity'], float(item['price']))
                     
-                    await self.clear_cart(user_id)
+                    # Очищаємо корзину в межах тієї ж транзакції
+                    await conn.execute("DELETE FROM cart WHERE user_id = $1", user_id)
                     return order_id
         else:
             _check_aiosqlite()
             async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
                 await db.execute("PRAGMA busy_timeout=30000")
                 cart_items = await self.get_cart(user_id)
+                
+                if not cart_items:
+                    raise ValueError("Корзина порожня")
                 
                 cursor = await db.execute("""
                     INSERT INTO orders (user_id, total_price, phone, address, receipt_photo_id)
@@ -718,7 +736,8 @@ class Database:
                         VALUES (?, ?, ?, ?)
                     """, (order_id, item['product_id'], item['quantity'], item['price']))
                 
-                await self.clear_cart(user_id)
+                # Очищаємо корзину в межах тієї ж транзакції
+                await db.execute("DELETE FROM cart WHERE user_id = ?", (user_id,))
                 await db.commit()
                 return order_id
     

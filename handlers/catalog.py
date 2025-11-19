@@ -80,11 +80,31 @@ async def back_to_catalog(callback: CallbackQuery):
     products = await db.get_products()
     keyboard = get_catalog_keyboard(products, page=0)
     
-    await callback.message.edit_text(
-        "🛍️ <b>Каталог товарів</b>\n\n"
-        "Оберіть товар:",
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
+    # Якщо повідомлення містить фото, видаляємо його і відправляємо нове
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(
+            "🛍️ <b>Каталог товарів</b>\n\n"
+            "Оберіть товар:",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    else:
+        try:
+            await callback.message.edit_text(
+                "🛍️ <b>Каталог товарів</b>\n\n"
+                "Оберіть товар:",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+        except Exception:
+            # Якщо не вдалося відредагувати, видаляємо і відправляємо нове
+            await callback.message.delete()
+            await callback.message.answer(
+                "🛍️ <b>Каталог товарів</b>\n\n"
+                "Оберіть товар:",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
     await callback.answer()
 

@@ -8,9 +8,8 @@ def get_main_menu():
     builder.add(KeyboardButton(text="🛒 Корзина"))
     builder.add(KeyboardButton(text="📦 Мої замовлення"))
     builder.add(KeyboardButton(text="📋 Предзакази"))
-    builder.add(KeyboardButton(text="❓ FAQ"))
     builder.add(KeyboardButton(text="📞 Зв'язок з адміном"))
-    builder.adjust(2, 2, 2)
+    builder.adjust(2, 2, 1)
     return builder.as_markup(resize_keyboard=True)
 
 def get_admin_menu():
@@ -20,9 +19,8 @@ def get_admin_menu():
     builder.add(KeyboardButton(text="📝 Редагувати товар"))
     builder.add(KeyboardButton(text="📊 Замовлення"))
     builder.add(KeyboardButton(text="📋 Предзакази"))
-    builder.add(KeyboardButton(text="❓ Керування FAQ"))
     builder.add(KeyboardButton(text="🏠 Головне меню"))
-    builder.adjust(2, 2, 2)
+    builder.adjust(2, 2)
     return builder.as_markup(resize_keyboard=True)
 
 def get_product_keyboard(product_id, is_preorder=False):

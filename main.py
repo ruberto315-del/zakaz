@@ -6,7 +6,7 @@ from config import BOT_TOKEN
 from database import db
 from handlers import (
     common, catalog, cart, orders, preorders,
-    admin, contact, faq, comment_orders
+    admin, contact, comment_orders
 )
 
 # Налаштування логування
@@ -31,7 +31,6 @@ async def main():
         dp.include_router(preorders.router)
         dp.include_router(admin.router)
         dp.include_router(contact.router)
-        dp.include_router(faq.router)
         dp.include_router(comment_orders.router)
         
         # Ініціалізація бази даних
