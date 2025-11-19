@@ -687,6 +687,18 @@ class Database:
                         }
                     return None
     
+    async def delete_product(self, product_id):
+        """Видалити товар"""
+        if self.use_postgres:
+            async with self.pool.acquire() as conn:
+                await conn.execute("DELETE FROM products WHERE id = $1", product_id)
+        else:
+            _check_aiosqlite()
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
+                await db.execute("DELETE FROM products WHERE id = ?", (product_id,))
+                await db.commit()
+    
     async def update_product(self, product_id, name=None, description=None, price=None, photo_id=None, is_available=None):
         """Оновити товар"""
         if self.use_postgres:

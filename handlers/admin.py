@@ -1,7 +1,8 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, InlineKeyboardButton
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
+from aiogram.utils.keyboard import InlineKeyboardBuilder
 from keyboards import (
     get_admin_menu, get_admin_orders_keyboard, get_order_status_keyboard,
     get_admin_products_keyboard, get_product_edit_keyboard, get_main_menu
@@ -27,11 +28,6 @@ def is_admin(user_id: int) -> bool:
     """Перевірити чи користувач адмін"""
     return user_id == ADMIN_ID
 
-@router.message(F.text == "🏠 Головне меню")
-async def admin_main_menu(message: Message):
-    """Головне меню адміна"""
-    if is_admin(message.from_user.id):
-        await message.answer("Адмін-панель:", reply_markup=get_admin_menu())
 
 @router.message(F.text == "➕ Додати товар")
 async def start_adding_product(message: Message, state: FSMContext):
@@ -111,12 +107,53 @@ async def show_products_for_edit(message: Message):
         await message.answer("Товарів не знайдено")
         return
     
-    keyboard = get_admin_products_keyboard(products)
+    keyboard = get_admin_products_keyboard(products, page=0, action="edit")
     await message.answer(
         "📝 <b>Оберіть товар для редагування:</b>",
         reply_markup=keyboard,
         parse_mode="HTML"
     )
+
+@router.message(F.text == "🗑️ Видалити товар")
+async def show_products_for_delete(message: Message):
+    """Показати товари для видалення"""
+    if not is_admin(message.from_user.id):
+        return
+    
+    products = await db.get_products(available_only=False)
+    
+    if not products:
+        await message.answer("Товарів не знайдено")
+        return
+    
+    keyboard = get_admin_products_keyboard(products, page=0, action="delete")
+    await message.answer(
+        "🗑️ <b>Оберіть товар для видалення:</b>",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+
+@router.callback_query(F.data.startswith("admin_products_page_"))
+async def admin_products_page(callback: CallbackQuery):
+    """Пагінація товарів для адміна"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Доступ заборонено", show_alert=True)
+        return
+    
+    parts = callback.data.split("_")
+    page = int(parts[3])
+    action = parts[4] if len(parts) > 4 else "edit"
+    
+    products = await db.get_products(available_only=False)
+    keyboard = get_admin_products_keyboard(products, page=page, action=action)
+    
+    action_text = "редагування" if action == "edit" else "видалення"
+    await callback.message.edit_text(
+        f"📝 <b>Оберіть товар для {action_text}:</b>",
+        reply_markup=keyboard,
+        parse_mode="HTML"
+    )
+    await callback.answer()
 
 @router.callback_query(F.data.startswith("admin_product_"))
 async def show_product_edit_options(callback: CallbackQuery):
@@ -125,13 +162,51 @@ async def show_product_edit_options(callback: CallbackQuery):
         await callback.answer("Доступ заборонено", show_alert=True)
         return
     
-    product_id = int(callback.data.split("_")[-1])
+    parts = callback.data.split("_")
+    product_id = int(parts[2])
+    action = parts[3] if len(parts) > 3 else "edit"
+    
     product = await db.get_product(product_id)
     
     if not product:
         await callback.answer("Товар не знайдено", show_alert=True)
         return
     
+    if action == "delete":
+        # Підтвердження видалення
+        text = f"🗑️ <b>Видалити товар?</b>\n\n"
+        text += f"ID: {product_id}\n"
+        text += f"Назва: {product['name']}\n"
+        text += f"Ціна: {product['price']} грн\n\n"
+        text += "Цю дію неможливо скасувати!"
+        
+        builder = InlineKeyboardBuilder()
+        builder.add(InlineKeyboardButton(text="✅ Так, видалити", callback_data=f"confirm_delete_{product_id}"))
+        builder.add(InlineKeyboardButton(text="❌ Скасувати", callback_data="admin_products_page_0_delete"))
+        builder.adjust(2)
+        
+        if product['photo_id']:
+            await callback.message.delete()
+            if product['photo_id'].startswith('http'):
+                await callback.message.answer_photo(
+                    product['photo_id'],
+                    caption=text,
+                    reply_markup=builder.as_markup(),
+                    parse_mode="HTML"
+                )
+            else:
+                await callback.message.answer_photo(
+                    product['photo_id'],
+                    caption=text,
+                    reply_markup=builder.as_markup(),
+                    parse_mode="HTML"
+                )
+        else:
+            await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+        await callback.answer()
+        return
+    
+    # Редагування
     text = f"📝 <b>Редагування товару</b>\n\n"
     text += f"ID: {product_id}\n"
     text += f"Назва: {product['name']}\n"
@@ -263,6 +338,42 @@ async def process_edit_price(message: Message, state: FSMContext):
         await state.clear()
     except ValueError:
         await message.answer("Будь ласка, введіть коректну ціну (тільки число):")
+
+@router.callback_query(F.data.startswith("confirm_delete_"))
+async def confirm_delete_product(callback: CallbackQuery):
+    """Підтвердити видалення товару"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Доступ заборонено", show_alert=True)
+        return
+    
+    product_id = int(callback.data.split("_")[-1])
+    product = await db.get_product(product_id)
+    
+    if not product:
+        await callback.answer("Товар не знайдено", show_alert=True)
+        return
+    
+    # Видаляємо товар
+    await db.delete_product(product_id)
+    
+    await callback.message.edit_text(
+        f"✅ Товар <b>{product['name']}</b> успішно видалено!",
+        parse_mode="HTML"
+    )
+    
+    # Показуємо список товарів
+    products = await db.get_products(available_only=False)
+    if products:
+        keyboard = get_admin_products_keyboard(products, page=0, action="delete")
+        await callback.message.answer(
+            "🗑️ <b>Оберіть товар для видалення:</b>",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    else:
+        await callback.message.answer("Товарів не знайдено")
+    
+    await callback.answer("Товар видалено")
 
 @router.callback_query(F.data.startswith("toggle_available_"))
 async def toggle_available(callback: CallbackQuery):

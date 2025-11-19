@@ -16,10 +16,10 @@ def get_admin_menu():
     builder = ReplyKeyboardBuilder()
     builder.add(KeyboardButton(text="➕ Додати товар"))
     builder.add(KeyboardButton(text="📝 Редагувати товар"))
+    builder.add(KeyboardButton(text="🗑️ Видалити товар"))
     builder.add(KeyboardButton(text="📊 Замовлення"))
     builder.add(KeyboardButton(text="📋 Предзакази"))
-    builder.add(KeyboardButton(text="🏠 Головне меню"))
-    builder.adjust(2, 2)
+    builder.adjust(2, 2, 1)
     return builder.as_markup(resize_keyboard=True)
 
 def get_product_keyboard(product_id, is_preorder=False):
@@ -157,20 +157,34 @@ def get_product_edit_keyboard(product_id):
     builder.add(InlineKeyboardButton(text="💰 Змінити ціну", callback_data=f"edit_price_{product_id}"))
     builder.add(InlineKeyboardButton(text="📷 Змінити фото", callback_data=f"edit_photo_{product_id}"))
     builder.add(InlineKeyboardButton(text="✅ Доступність", callback_data=f"toggle_available_{product_id}"))
-    builder.add(InlineKeyboardButton(text="🔙 До товарів", callback_data="admin_products"))
-    builder.adjust(2)
+    builder.add(InlineKeyboardButton(text="🔙 До товарів", callback_data="admin_products_page_0_edit"))
+    builder.adjust(1)
     return builder.as_markup()
 
-def get_admin_products_keyboard(products):
-    """Клавіатура товарів для адміна"""
+def get_admin_products_keyboard(products, page=0, per_page=5, action="edit"):
+    """Клавіатура товарів для адміна з пагінацією"""
     builder = InlineKeyboardBuilder()
     
-    for product in products:
+    start = page * per_page
+    end = start + per_page
+    page_products = products[start:end]
+    
+    for product in page_products:
         status = "✅" if product['is_available'] else "❌"
         builder.add(InlineKeyboardButton(
             text=f"{status} {product['name']} - {product['price']} грн",
-            callback_data=f"admin_product_{product['id']}"
+            callback_data=f"admin_product_{product['id']}_{action}"
         ))
+    
+    # Кнопки навігації
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(InlineKeyboardButton(text="◀️ Назад", callback_data=f"admin_products_page_{page-1}_{action}"))
+    if end < len(products):
+        nav_buttons.append(InlineKeyboardButton(text="Вперед ▶️", callback_data=f"admin_products_page_{page+1}_{action}"))
+    
+    if nav_buttons:
+        builder.row(*nav_buttons)
     
     builder.add(InlineKeyboardButton(text="🔙 Адмін-панель", callback_data="admin_menu"))
     return builder.as_markup()
