@@ -7,8 +7,7 @@ def get_main_menu():
     builder.add(KeyboardButton(text="🛍️ Каталог товарів"))
     builder.add(KeyboardButton(text="🛒 Корзина"))
     builder.add(KeyboardButton(text="📦 Мої замовлення"))
-    builder.add(KeyboardButton(text="📋 Предзакази"))
-    builder.adjust(2, 2)
+    builder.adjust(2, 1)
     return builder.as_markup(resize_keyboard=True)
 
 def get_admin_menu():

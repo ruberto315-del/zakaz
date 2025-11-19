@@ -128,7 +128,7 @@ async def process_address(message: Message, state: FSMContext):
         bot = message.bot
         admin_text = f"🆕 <b>Нове замовлення #{order_id}</b>\n\n"
         admin_text += f"👤 <b>Користувач:</b>\n"
-        admin_text += f"   ID: {user_id}\n"
+        admin_text += f"   ID: <code>{user_id}</code>\n"
         if user:
             admin_text += f"   Ім'я: {user.get('first_name', 'Не вказано')}\n"
             if user.get('username'):
@@ -259,7 +259,7 @@ async def process_receipt(message: Message, state: FSMContext):
         
         admin_text = f"📸 <b>Чек для замовлення #{order_id}</b>\n\n"
         admin_text += f"👤 <b>Користувач:</b>\n"
-        admin_text += f"   ID: {order['user_id']}\n"
+        admin_text += f"   ID: <code>{order['user_id']}</code>\n"
         if user:
             admin_text += f"   Ім'я: {user.get('first_name', 'Не вказано')}\n"
             if user.get('username'):

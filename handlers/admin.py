@@ -446,7 +446,7 @@ async def show_admin_order(callback: CallbackQuery):
     
     text = f"📦 <b>Замовлення #{order_id}</b>\n\n"
     text += f"Користувач: {user['first_name'] if user else 'Невідомо'}\n"
-    text += f"ID: {order['user_id']}\n"
+    text += f"ID: <code>{order['user_id']}</code>\n"
     text += f"Статус: {status_text}\n"
     text += f"📞 Телефон: {order['phone']}\n"
     text += f"📍 Адреса: {order['address']}\n\n"
