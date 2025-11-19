@@ -2,7 +2,7 @@ from aiogram import Router, F, Bot
 from aiogram.types import Message, CallbackQuery
 from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
-from keyboards import get_orders_keyboard, get_payment_keyboard, get_main_menu
+from keyboards import get_orders_keyboard, get_main_menu
 from database import db
 from config import ORDER_STATUSES, ADMIN_ID, ADMIN_USERNAME
 
@@ -121,9 +121,7 @@ async def process_address(message: Message, state: FSMContext):
             f"📞 Телефон: {phone}\n"
             f"📍 Адреса: {address}\n"
             f"💰 Сума: {total} грн\n\n"
-            f"📞 Для оплати та уточнення деталей зв'яжіться з адміністратором: {admin_username_display}\n\n"
-            "Або прикріпіть чек про оплату:",
-            reply_markup=get_payment_keyboard(order_id, ADMIN_USERNAME)
+            f"📞 Для оплати та уточнення деталей зв'яжіться з адміністратором: {admin_username_display}"
         )
         
         # Відправити повідомлення адміністратору
