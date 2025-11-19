@@ -195,11 +195,30 @@ async def admin_products_page(callback: CallbackQuery):
     }
     action_text = action_texts.get(action, "перегляду")
     emoji = "📝" if action == "edit" else "🗑️" if action == "delete" else "🛍️"
-    await callback.message.edit_text(
-        f"{emoji} <b>Оберіть товар для {action_text}:</b>",
-        reply_markup=keyboard,
-        parse_mode="HTML"
-    )
+    
+    # Якщо повідомлення містить фото, видаляємо його і відправляємо нове
+    if callback.message.photo:
+        await callback.message.delete()
+        await callback.message.answer(
+            f"{emoji} <b>Оберіть товар для {action_text}:</b>",
+            reply_markup=keyboard,
+            parse_mode="HTML"
+        )
+    else:
+        try:
+            await callback.message.edit_text(
+                f"{emoji} <b>Оберіть товар для {action_text}:</b>",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+        except Exception:
+            # Якщо не вдалося відредагувати, видаляємо і відправляємо нове
+            await callback.message.delete()
+            await callback.message.answer(
+                f"{emoji} <b>Оберіть товар для {action_text}:</b>",
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
     await callback.answer()
 
 @router.callback_query(F.data.startswith("admin_product_"))
