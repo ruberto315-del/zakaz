@@ -8,8 +8,7 @@ def get_main_menu():
     builder.add(KeyboardButton(text="🛒 Корзина"))
     builder.add(KeyboardButton(text="📦 Мої замовлення"))
     builder.add(KeyboardButton(text="📋 Предзакази"))
-    builder.add(KeyboardButton(text="📞 Зв'язок з адміном"))
-    builder.adjust(2, 2, 1)
+    builder.adjust(2, 2)
     return builder.as_markup(resize_keyboard=True)
 
 def get_admin_menu():
@@ -179,10 +178,6 @@ def get_admin_products_keyboard(products):
 def get_payment_keyboard(order_id, admin_username=None):
     """Клавіатура оплати"""
     builder = InlineKeyboardBuilder()
-    if admin_username:
-        # Видаляємо @ якщо є
-        username_clean = admin_username.lstrip('@')
-        builder.add(InlineKeyboardButton(text="📞 Зв'язатися з адміном", url=f"https://t.me/{username_clean}"))
     builder.add(InlineKeyboardButton(text="📸 Прикріпити чек", callback_data=f"attach_receipt_{order_id}"))
     builder.add(InlineKeyboardButton(text="🔙 Назад", callback_data="main_menu"))
     builder.adjust(1)

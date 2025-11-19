@@ -1,7 +1,12 @@
 from aiogram import Router, F
-from aiogram.types import Message, CallbackQuery
+from aiogram.types import Message, CallbackQuery, URLInputFile, BufferedInputFile
+from aiogram.utils.chat_action import ChatActionSender
 from keyboards import get_catalog_keyboard, get_product_keyboard
 from database import db
+import aiohttp
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -62,13 +67,44 @@ async def show_product(callback: CallbackQuery):
         await callback.message.delete()
         # Перевіряємо чи це URL (починається з http) або file_id
         if product['photo_id'].startswith('http'):
-            # Це URL з postimages.org, відправляємо через URL
-            await callback.message.answer_photo(
-                product['photo_id'],
-                caption=text,
-                reply_markup=keyboard,
-                parse_mode="HTML"
-            )
+            # Це URL з postimages.org
+            # Telegram не може отримати контент з деяких URL, тому скачуємо фото і відправляємо як файл
+            try:
+                async with aiohttp.ClientSession() as session:
+                    headers = {
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    }
+                    async with session.get(product['photo_id'], headers=headers, timeout=aiohttp.ClientTimeout(total=30)) as resp:
+                        if resp.status == 200:
+                            photo_data = await resp.read()
+                            # Визначаємо ім'я файлу з URL
+                            filename = product['photo_id'].split('/')[-1] or 'photo.jpg'
+                            # Використовуємо BufferedInputFile для відправки байтів
+                            photo_file = BufferedInputFile(photo_data, filename=filename)
+                            
+                            async with ChatActionSender.upload_photo(chat_id=callback.message.chat.id, bot=callback.bot):
+                                await callback.message.answer_photo(
+                                    photo_file,
+                                    caption=text,
+                                    reply_markup=keyboard,
+                                    parse_mode="HTML"
+                                )
+                        else:
+                            # Якщо не вдалося скачати, відправляємо без фото
+                            logger.error(f"Не вдалося скачати фото: статус {resp.status}")
+                            await callback.message.answer(
+                                text,
+                                reply_markup=keyboard,
+                                parse_mode="HTML"
+                            )
+            except Exception as e:
+                logger.error(f"Помилка при скачуванні та відправці фото: {e}", exc_info=True)
+                # Відправляємо без фото
+                await callback.message.answer(
+                    text,
+                    reply_markup=keyboard,
+                    parse_mode="HTML"
+                )
         else:
             # Це старий file_id (для сумісності)
             await callback.message.answer_photo(
