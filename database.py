@@ -141,6 +141,33 @@ class Database:
                     )
                 """)
                 
+                # Таблиця активних постів для збору замовлень
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS active_posts (
+                        id SERIAL PRIMARY KEY,
+                        post_message_id BIGINT NOT NULL,
+                        chat_id BIGINT NOT NULL,
+                        admin_id BIGINT NOT NULL,
+                        is_active BOOLEAN DEFAULT TRUE,
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        finished_at TIMESTAMP
+                    )
+                """)
+                
+                # Таблиця замовлень з коментарів
+                await conn.execute("""
+                    CREATE TABLE IF NOT EXISTS comment_orders (
+                        id SERIAL PRIMARY KEY,
+                        post_id INTEGER NOT NULL,
+                        user_id BIGINT NOT NULL,
+                        position_number INTEGER NOT NULL,
+                        quantity INTEGER DEFAULT 1,
+                        comment_message_id BIGINT,
+                        created_at TIMESTAMP DEFAULT NOW(),
+                        FOREIGN KEY (post_id) REFERENCES active_posts(id) ON DELETE CASCADE
+                    )
+                """)
+                
                 logger.info("Таблиці PostgreSQL створені/перевірені")
         except Exception as e:
             logger.error(f"Помилка ініціалізації PostgreSQL: {e}")
@@ -243,6 +270,33 @@ class Database:
                     question TEXT NOT NULL,
                     answer TEXT NOT NULL,
                     order_index INTEGER DEFAULT 0
+                )
+            """)
+            
+            # Таблиця активних постів для збору замовлень
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS active_posts (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    post_message_id INTEGER NOT NULL,
+                    chat_id INTEGER NOT NULL,
+                    admin_id INTEGER NOT NULL,
+                    is_active BOOLEAN DEFAULT 1,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    finished_at TIMESTAMP
+                )
+            """)
+            
+            # Таблиця замовлень з коментарів
+            await db.execute("""
+                CREATE TABLE IF NOT EXISTS comment_orders (
+                    id INTEGER PRIMARY KEY AUTOINCREMENT,
+                    post_id INTEGER NOT NULL,
+                    user_id INTEGER NOT NULL,
+                    position_number INTEGER NOT NULL,
+                    quantity INTEGER DEFAULT 1,
+                    comment_message_id INTEGER,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    FOREIGN KEY (post_id) REFERENCES active_posts(id) ON DELETE CASCADE
                 )
             """)
             
@@ -943,6 +997,204 @@ class Database:
                             'order_index': row[3]
                         })
                     return faqs
+    
+    # Активні пости та замовлення з коментарів
+    async def start_post_collection(self, post_message_id, chat_id, admin_id):
+        """Почати збір замовлень для поста"""
+        if self.use_postgres:
+            async with self.pool.acquire() as conn:
+                # Спочатку закриваємо всі інші активні пости в цьому чаті
+                await conn.execute("""
+                    UPDATE active_posts 
+                    SET is_active = FALSE, finished_at = NOW()
+                    WHERE chat_id = $1 AND is_active = TRUE
+                """, chat_id)
+                
+                # Створюємо новий активний пост
+                post_id = await conn.fetchval("""
+                    INSERT INTO active_posts (post_message_id, chat_id, admin_id, is_active)
+                    VALUES ($1, $2, $3, TRUE)
+                    RETURNING id
+                """, post_message_id, chat_id, admin_id)
+                return post_id
+        else:
+            _check_aiosqlite()
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
+                # Спочатку закриваємо всі інші активні пости в цьому чаті
+                await db.execute("""
+                    UPDATE active_posts 
+                    SET is_active = 0, finished_at = CURRENT_TIMESTAMP
+                    WHERE chat_id = ? AND is_active = 1
+                """, (chat_id,))
+                
+                # Створюємо новий активний пост
+                cursor = await db.execute("""
+                    INSERT INTO active_posts (post_message_id, chat_id, admin_id, is_active)
+                    VALUES (?, ?, ?, 1)
+                """, (post_message_id, chat_id, admin_id))
+                await db.commit()
+                return cursor.lastrowid
+    
+    async def finish_post_collection(self, post_message_id, chat_id):
+        """Завершити збір замовлень для поста"""
+        if self.use_postgres:
+            async with self.pool.acquire() as conn:
+                await conn.execute("""
+                    UPDATE active_posts 
+                    SET is_active = FALSE, finished_at = NOW()
+                    WHERE post_message_id = $1 AND chat_id = $2 AND is_active = TRUE
+                """, post_message_id, chat_id)
+        else:
+            _check_aiosqlite()
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
+                await db.execute("""
+                    UPDATE active_posts 
+                    SET is_active = 0, finished_at = CURRENT_TIMESTAMP
+                    WHERE post_message_id = ? AND chat_id = ? AND is_active = 1
+                """, (post_message_id, chat_id))
+                await db.commit()
+    
+    async def get_active_post(self, post_message_id, chat_id):
+        """Отримати активний пост"""
+        if self.use_postgres:
+            async with self.pool.acquire() as conn:
+                row = await conn.fetchrow("""
+                    SELECT * FROM active_posts 
+                    WHERE post_message_id = $1 AND chat_id = $2 AND is_active = TRUE
+                """, post_message_id, chat_id)
+                if row:
+                    return dict(row)
+                return None
+        else:
+            _check_aiosqlite()
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
+                async with db.execute("""
+                    SELECT * FROM active_posts 
+                    WHERE post_message_id = ? AND chat_id = ? AND is_active = 1
+                """, (post_message_id, chat_id)) as cursor:
+                    row = await cursor.fetchone()
+                    if row:
+                        return {
+                            'id': row[0],
+                            'post_message_id': row[1],
+                            'chat_id': row[2],
+                            'admin_id': row[3],
+                            'is_active': row[4],
+                            'created_at': row[5],
+                            'finished_at': row[6]
+                        }
+                    return None
+    
+    async def add_comment_order(self, post_id, user_id, position_number, quantity=1, comment_message_id=None):
+        """Додати замовлення з коментаря"""
+        if self.use_postgres:
+            async with self.pool.acquire() as conn:
+                order_id = await conn.fetchval("""
+                    INSERT INTO comment_orders (post_id, user_id, position_number, quantity, comment_message_id)
+                    VALUES ($1, $2, $3, $4, $5)
+                    RETURNING id
+                """, post_id, user_id, position_number, quantity, comment_message_id)
+                return order_id
+        else:
+            _check_aiosqlite()
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
+                cursor = await db.execute("""
+                    INSERT INTO comment_orders (post_id, user_id, position_number, quantity, comment_message_id)
+                    VALUES (?, ?, ?, ?, ?)
+                """, (post_id, user_id, position_number, quantity, comment_message_id))
+                await db.commit()
+                return cursor.lastrowid
+    
+    async def get_comment_orders(self, post_id):
+        """Отримати всі замовлення для поста"""
+        if self.use_postgres:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT co.*, u.username, u.first_name
+                    FROM comment_orders co
+                    LEFT JOIN users u ON co.user_id = u.user_id
+                    WHERE co.post_id = $1
+                    ORDER BY co.position_number, co.created_at
+                """, post_id)
+                orders = []
+                for row in rows:
+                    orders.append(dict(row))
+                return orders
+        else:
+            _check_aiosqlite()
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
+                async with db.execute("""
+                    SELECT co.*, u.username, u.first_name
+                    FROM comment_orders co
+                    LEFT JOIN users u ON co.user_id = u.user_id
+                    WHERE co.post_id = ?
+                    ORDER BY co.position_number, co.created_at
+                """, (post_id,)) as cursor:
+                    rows = await cursor.fetchall()
+                    orders = []
+                    for row in rows:
+                        orders.append({
+                            'id': row[0],
+                            'post_id': row[1],
+                            'user_id': row[2],
+                            'position_number': row[3],
+                            'quantity': row[4],
+                            'comment_message_id': row[5],
+                            'created_at': row[6],
+                            'username': row[7],
+                            'first_name': row[8]
+                        })
+                    return orders
+    
+    async def get_comment_orders_summary(self, post_id):
+        """Отримати підсумок замовлень для поста (згруповано по позиціях)"""
+        if self.use_postgres:
+            async with self.pool.acquire() as conn:
+                rows = await conn.fetch("""
+                    SELECT 
+                        position_number,
+                        SUM(quantity) as total_quantity,
+                        COUNT(DISTINCT user_id) as unique_users,
+                        COUNT(*) as total_orders
+                    FROM comment_orders
+                    WHERE post_id = $1
+                    GROUP BY position_number
+                    ORDER BY position_number
+                """, post_id)
+                summary = []
+                for row in rows:
+                    summary.append(dict(row))
+                return summary
+        else:
+            _check_aiosqlite()
+            async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                await db.execute("PRAGMA busy_timeout=30000")
+                async with db.execute("""
+                    SELECT 
+                        position_number,
+                        SUM(quantity) as total_quantity,
+                        COUNT(DISTINCT user_id) as unique_users,
+                        COUNT(*) as total_orders
+                    FROM comment_orders
+                    WHERE post_id = ?
+                    GROUP BY position_number
+                    ORDER BY position_number
+                """, (post_id,)) as cursor:
+                    rows = await cursor.fetchall()
+                    summary = []
+                    for row in rows:
+                        summary.append({
+                            'position_number': row[0],
+                            'total_quantity': row[1],
+                            'unique_users': row[2],
+                            'total_orders': row[3]
+                        })
+                    return summary
     
     async def close(self):
         """Закрити підключення"""
