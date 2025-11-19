@@ -10,7 +10,7 @@ logger = logging.getLogger(__name__)
 aiosqlite = None
 
 # Імпортуємо змінні з config
-from config import DATABASE_NAME, ORDER_STATUSES, USE_POSTGRES, DATABASE_URL
+from config import DATABASE_NAME, ORDER_STATUSES, USE_POSTGRES, DATABASE_URL, DB_CONFIG
 
 # Тепер імпортуємо aiosqlite тільки якщо потрібен SQLite
 if not USE_POSTGRES:
@@ -45,9 +45,13 @@ class Database:
         """Ініціалізація бази даних"""
         logger.info(f"Ініціалізація БД: USE_POSTGRES={self.use_postgres}, DATABASE_URL={'встановлено' if self.db_url else 'не встановлено'}")
         if self.use_postgres:
+            # Перевіряємо чи є DATABASE_URL або окремі параметри
             if not self.db_url:
-                logger.error("USE_POSTGRES=True, але DATABASE_URL не встановлено! Перевірте змінні оточення.")
-                raise ValueError("DATABASE_URL не встановлено для PostgreSQL")
+                # Перевіряємо чи є окремі параметри
+                from config import DB_CONFIG
+                if not (DB_CONFIG.get('password') and DB_CONFIG.get('host') and DB_CONFIG.get('host') != 'localhost'):
+                    logger.error("USE_POSTGRES=True, але DATABASE_URL та параметри підключення не встановлено! Перевірте змінні оточення.")
+                    raise ValueError("Параметри підключення до PostgreSQL не встановлено")
             await self._init_postgres()
         else:
             logger.info("Використовується SQLite")
@@ -57,8 +61,15 @@ class Database:
         """Ініціалізація PostgreSQL"""
         try:
             # Створюємо connection pool
-            self.pool = await asyncpg.create_pool(self.db_url, min_size=1, max_size=10)
-            logger.info("Підключено до PostgreSQL")
+            # Використовуємо DATABASE_URL якщо є, інакше використовуємо окремі параметри
+            if self.db_url:
+                logger.info(f"Підключення до PostgreSQL через DATABASE_URL: {self.db_url.split('@')[1] if '@' in self.db_url else 'встановлено'}")
+                self.pool = await asyncpg.create_pool(self.db_url, min_size=5, max_size=20)
+            else:
+                # Використовуємо окремі параметри
+                logger.info(f"Підключення до PostgreSQL: {DB_CONFIG['user']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")
+                self.pool = await asyncpg.create_pool(**DB_CONFIG, min_size=5, max_size=20)
+            logger.info("✅ Успішно підключено до бази даних")
             
             async with self.pool.acquire() as conn:
                 # Таблиця користувачів
@@ -319,23 +330,50 @@ class Database:
     
     # Користувачі
     async def add_user(self, user_id, username=None, first_name=None):
-        """Додати користувача"""
+        """Додати користувача
+        
+        Returns:
+            bool: True якщо користувач був доданий (новий), False якщо вже існував
+        """
+        # Спочатку перевіряємо чи користувач вже існує
+        existing_user = await self.get_user(user_id)
+        if existing_user:
+            # Оновлюємо дані якщо вони змінилися
+            if username != existing_user.get('username') or first_name != existing_user.get('first_name'):
+                if self.use_postgres:
+                    async with self.pool.acquire() as conn:
+                        await conn.execute("""
+                            UPDATE users SET username = $1, first_name = $2
+                            WHERE user_id = $3
+                        """, username, first_name, user_id)
+                else:
+                    _check_aiosqlite()
+                    async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
+                        await db.execute("PRAGMA busy_timeout=30000")
+                        await db.execute("""
+                            UPDATE users SET username = ?, first_name = ?
+                            WHERE user_id = ?
+                        """, (username, first_name, user_id))
+                        await db.commit()
+            return False  # Користувач вже існував
+        
+        # Користувач новий, додаємо
         if self.use_postgres:
             async with self.pool.acquire() as conn:
                 await conn.execute("""
                     INSERT INTO users (user_id, username, first_name)
                     VALUES ($1, $2, $3)
-                    ON CONFLICT (user_id) DO NOTHING
                 """, user_id, username, first_name)
         else:
             _check_aiosqlite()
             async with aiosqlite.connect(self.db_name, timeout=30.0) as db:
                 await db.execute("PRAGMA busy_timeout=30000")
                 await db.execute("""
-                    INSERT OR IGNORE INTO users (user_id, username, first_name)
+                    INSERT INTO users (user_id, username, first_name)
                     VALUES (?, ?, ?)
                 """, (user_id, username, first_name))
                 await db.commit()
+        return True  # Користувач був доданий
     
     async def update_user_data(self, user_id, phone=None, address=None):
         """Оновити дані користувача"""

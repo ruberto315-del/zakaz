@@ -164,11 +164,32 @@ async def handle_comment(message: Message):
             return
         
         # Додаємо користувача в базу, якщо його немає
-        await db.add_user(
+        is_new_user = await db.add_user(
             user_id,
             username=message.from_user.username,
             first_name=message.from_user.first_name
         )
+        
+        # Відправити сповіщення адміну про нового користувача
+        if is_new_user:
+            bot = message.bot
+            username = message.from_user.username
+            first_name = message.from_user.first_name
+            
+            admin_text = "🆕 <b>Новий користувач зареєстрований!</b>\n\n"
+            admin_text += f"🆔 ID: {user_id}\n"
+            
+            # Додаємо username або ім'я або тільки ID
+            if username:
+                admin_text += f"👤 Username: @{username}\n"
+            elif first_name:
+                admin_text += f"👤 Ім'я: {first_name}\n"
+            # ID завжди виводиться, тому додаткового тексту не потрібно
+            
+            try:
+                await bot.send_message(ADMIN_ID, admin_text, parse_mode="HTML")
+            except Exception as e:
+                logger.error(f"Помилка відправки сповіщення про нового користувача адміну: {e}")
         
         # Додаємо замовлення для кожної позиції
         added_orders = []

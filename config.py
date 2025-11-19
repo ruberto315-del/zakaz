@@ -15,30 +15,37 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "testusername")
 # Підключення до PostgreSQL
 # Railway надає DATABASE_URL або окремі змінні
 DATABASE_URL = os.getenv("DATABASE_URL")
-if not DATABASE_URL:
-    # Якщо DATABASE_URL не встановлено, використовуємо окремі змінні
-    PGUSER = os.getenv("PGUSER", "postgres")
-    PGPASSWORD = os.getenv("POSTGRES_PASSWORD", "")
-    PGHOST = os.getenv("RAILWAY_PRIVATE_DOMAIN") or os.getenv("PGHOST", "localhost")
-    PGPORT = os.getenv("PGPORT", "5432")
-    PGDATABASE = os.getenv("POSTGRES_DB") or os.getenv("PGDATABASE", "railway")
-    # Спробуємо створити DATABASE_URL якщо є всі необхідні змінні
-    if PGPASSWORD and PGHOST and PGHOST != "localhost":
-        DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
-    elif PGPASSWORD:  # Якщо є пароль, навіть якщо localhost, спробуємо підключитися
-        DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
+
+# Окремі параметри для підключення до PostgreSQL (якщо DATABASE_URL не встановлено)
+PGUSER = os.getenv("PGUSER", "postgres")
+PGPASSWORD = os.getenv("POSTGRES_PASSWORD", "") or os.getenv("PGPASSWORD", "")
+PGHOST = os.getenv("RAILWAY_PRIVATE_DOMAIN") or os.getenv("PGHOST", "localhost")
+PGPORT = os.getenv("PGPORT", "5432")
+PGDATABASE = os.getenv("POSTGRES_DB") or os.getenv("PGDATABASE", "railway")
+
+# Якщо DATABASE_URL не встановлено, але є окремі параметри, створюємо DATABASE_URL
+if not DATABASE_URL and PGPASSWORD and PGHOST:
+    DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
+
+# Словник з параметрами для підключення (для використання з asyncpg.create_pool)
+DB_CONFIG = {
+    'user': PGUSER,
+    'password': PGPASSWORD,
+    'database': PGDATABASE,
+    'host': PGHOST,
+    'port': PGPORT,
+}
 
 # Визначаємо чи використовувати PostgreSQL
-# Якщо DATABASE_URL встановлено, автоматично використовуємо PostgreSQL
-# Якщо USE_POSTGRES явно встановлено в змінних оточення, використовуємо його
+# Якщо DATABASE_URL встановлено або є параметри підключення, використовуємо PostgreSQL
 USE_POSTGRES_ENV = os.getenv("USE_POSTGRES", "").lower()
 if USE_POSTGRES_ENV in ("true", "1", "yes"):
     USE_POSTGRES = True
 elif USE_POSTGRES_ENV in ("false", "0", "no"):
     USE_POSTGRES = False
 else:
-    # Автоматично визначаємо на основі DATABASE_URL
-    USE_POSTGRES = bool(DATABASE_URL)
+    # Автоматично визначаємо на основі наявності параметрів
+    USE_POSTGRES = bool(DATABASE_URL or (PGPASSWORD and PGHOST and PGHOST != "localhost"))
 
 DATABASE_NAME = "shop_bot.db"  # Використовується тільки для SQLite
 
