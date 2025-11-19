@@ -10,6 +10,9 @@ from keyboards import (
 from database import db
 from config import ADMIN_ID, ORDER_STATUSES
 from notifications import send_order_status_notification
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = Router()
 
@@ -185,24 +188,26 @@ async def show_product_edit_options(callback: CallbackQuery):
         builder.add(InlineKeyboardButton(text="❌ Скасувати", callback_data="admin_products_page_0_delete"))
         builder.adjust(2)
         
-        if product['photo_id']:
+        # Перевіряємо чи повідомлення містить фото
+        if callback.message.photo:
             await callback.message.delete()
-            if product['photo_id'].startswith('http'):
+        
+        if product['photo_id'] and not product['photo_id'].startswith('http'):
+            # Це file_id від Telegram - відправляємо фото
+            try:
                 await callback.message.answer_photo(
                     product['photo_id'],
                     caption=text,
                     reply_markup=builder.as_markup(),
                     parse_mode="HTML"
                 )
-            else:
-                await callback.message.answer_photo(
-                    product['photo_id'],
-                    caption=text,
-                    reply_markup=builder.as_markup(),
-                    parse_mode="HTML"
-                )
+            except Exception as e:
+                logger.error(f"Помилка відправки фото: {e}")
+                # Якщо не вдалося відправити фото, відправляємо тільки текст
+                await callback.message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
         else:
-            await callback.message.edit_text(text, reply_markup=builder.as_markup(), parse_mode="HTML")
+            # Немає фото або це URL (не відправляємо через URL)
+            await callback.message.answer(text, reply_markup=builder.as_markup(), parse_mode="HTML")
         await callback.answer()
         return
     
