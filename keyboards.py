@@ -1,6 +1,12 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton, InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.utils.keyboard import ReplyKeyboardBuilder, InlineKeyboardBuilder
 
+def get_cancel_add_product_keyboard():
+    """Клавіатура для скасування додавання товару"""
+    builder = InlineKeyboardBuilder()
+    builder.add(InlineKeyboardButton(text="❌ Скасувати додавання", callback_data="cancel_add_product"))
+    return builder.as_markup()
+
 def get_main_menu():
     """Головне меню"""
     builder = ReplyKeyboardBuilder()

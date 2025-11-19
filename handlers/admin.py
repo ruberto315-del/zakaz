@@ -5,7 +5,8 @@ from aiogram.fsm.state import State, StatesGroup
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 from keyboards import (
     get_admin_menu, get_admin_orders_keyboard, get_order_status_keyboard,
-    get_admin_products_keyboard, get_product_edit_keyboard, get_main_menu
+    get_admin_products_keyboard, get_product_edit_keyboard, get_main_menu,
+    get_cancel_add_product_keyboard
 )
 from database import db
 from config import ADMIN_ID, ORDER_STATUSES
@@ -38,21 +39,24 @@ async def start_adding_product(message: Message, state: FSMContext):
     if not is_admin(message.from_user.id):
         return
     
-    await message.answer("Введіть назву товару:")
+    keyboard = get_cancel_add_product_keyboard()
+    await message.answer("Введіть назву товару:", reply_markup=keyboard)
     await state.set_state(AdminStates.adding_product_name)
 
 @router.message(AdminStates.adding_product_name)
 async def process_product_name(message: Message, state: FSMContext):
     """Обробити назву товару"""
     await state.update_data(name=message.text)
-    await message.answer("Введіть опис товару:")
+    keyboard = get_cancel_add_product_keyboard()
+    await message.answer("Введіть опис товару:", reply_markup=keyboard)
     await state.set_state(AdminStates.adding_product_description)
 
 @router.message(AdminStates.adding_product_description)
 async def process_product_description(message: Message, state: FSMContext):
     """Обробити опис товару"""
     await state.update_data(description=message.text)
-    await message.answer("Введіть ціну товару (тільки число):")
+    keyboard = get_cancel_add_product_keyboard()
+    await message.answer("Введіть ціну товару (тільки число):", reply_markup=keyboard)
     await state.set_state(AdminStates.adding_product_price)
 
 @router.message(AdminStates.adding_product_price)
@@ -61,17 +65,20 @@ async def process_product_price(message: Message, state: FSMContext):
     try:
         price = float(message.text.replace(",", "."))
         await state.update_data(price=price)
-        await message.answer("Введіть категорію товару (або /skip щоб пропустити):")
+        keyboard = get_cancel_add_product_keyboard()
+        await message.answer("Введіть категорію товару (або /skip щоб пропустити):", reply_markup=keyboard)
         await state.set_state(AdminStates.adding_product_category)
     except ValueError:
-        await message.answer("Будь ласка, введіть коректну ціну (тільки число):")
+        keyboard = get_cancel_add_product_keyboard()
+        await message.answer("Будь ласка, введіть коректну ціну (тільки число):", reply_markup=keyboard)
 
 @router.message(AdminStates.adding_product_category)
 async def process_product_category(message: Message, state: FSMContext):
     """Обробити категорію товару"""
     category = message.text.strip() if message.text != "/skip" else None
     await state.update_data(category=category)
-    await message.answer("Надішліть фото товару:")
+    keyboard = get_cancel_add_product_keyboard()
+    await message.answer("Надішліть фото товару:", reply_markup=keyboard)
     await state.set_state(AdminStates.adding_product_photo)
 
 @router.message(AdminStates.adding_product_photo, F.photo)
@@ -93,10 +100,22 @@ async def process_product_photo(message: Message, state: FSMContext):
         f"✅ Товар додано!\n\n"
         f"ID: {product_id}\n"
         f"Назва: {data['name']}\n"
-        f"Ціна: {data['price']} грн"
+        f"Ціна: {data['price']} грн",
+        reply_markup=None
     )
     
     await state.clear()
+
+@router.callback_query(F.data == "cancel_add_product")
+async def cancel_add_product(callback: CallbackQuery, state: FSMContext):
+    """Скасувати додавання товару"""
+    if not is_admin(callback.from_user.id):
+        await callback.answer("Доступ заборонено", show_alert=True)
+        return
+    
+    await state.clear()
+    await callback.message.edit_text("❌ Додавання товару скасовано.")
+    await callback.answer("Додавання скасовано")
 
 @router.message(F.text == "📝 Редагувати товар")
 async def show_products_for_edit(message: Message):
