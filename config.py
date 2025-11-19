@@ -30,11 +30,11 @@ if not DATABASE_URL and PGPASSWORD and PGHOST:
 
 # Словник з параметрами для підключення (для використання з asyncpg.create_pool)
 DB_CONFIG = {
-    'user': PGUSER,
-    'password': PGPASSWORD,
-    'database': PGDATABASE,
-    'host': PGHOST,
-    'port': PGPORT,
+    'user': "postgres",
+    'password': "mptRpMNbdRfqtERUEaYMsDOcwkCgSgyf",
+    'database': "railway",
+    'host': "postgres.railway.internal",
+    'port': "5432",
 }
 
 # Визначаємо чи використовувати PostgreSQL
