@@ -24,10 +24,6 @@ PGHOST = os.getenv("RAILWAY_PRIVATE_DOMAIN") or os.getenv("PGHOST", "localhost")
 PGPORT = os.getenv("PGPORT", "5432")
 PGDATABASE = os.getenv("POSTGRES_DB") or os.getenv("PGDATABASE", "railway")
 
-# Якщо DATABASE_URL не встановлено, але є окремі параметри, створюємо DATABASE_URL
-if not DATABASE_URL and PGPASSWORD and PGHOST:
-    DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
-
 # Словник з параметрами для підключення (для використання з asyncpg.create_pool)
 DB_CONFIG = {
     'user': "postgres",
@@ -36,6 +32,12 @@ DB_CONFIG = {
     'host': "postgres.railway.internal",
     'port': "5432",
 }
+
+# Якщо DATABASE_URL не встановлено, але є окремі параметри, створюємо DATABASE_URL
+# Але тільки якщо DB_CONFIG не заповнений (для сумісності зі старим кодом)
+if not DATABASE_URL and not (DB_CONFIG.get('password') and DB_CONFIG.get('host')):
+    if PGPASSWORD and PGHOST:
+        DATABASE_URL = f"postgresql://{PGUSER}:{PGPASSWORD}@{PGHOST}:{PGPORT}/{PGDATABASE}"
 
 # Визначаємо чи використовувати PostgreSQL
 # Якщо DATABASE_URL встановлено або є параметри підключення, використовуємо PostgreSQL
@@ -46,7 +48,9 @@ elif USE_POSTGRES_ENV in ("false", "0", "no"):
     USE_POSTGRES = False
 else:
     # Автоматично визначаємо на основі наявності параметрів
-    USE_POSTGRES = bool(DATABASE_URL or (PGPASSWORD and PGHOST and PGHOST != "localhost"))
+    # Перевіряємо чи DB_CONFIG заповнений (має password та host)
+    db_config_filled = bool(DB_CONFIG.get('password') and DB_CONFIG.get('host') and DB_CONFIG.get('host') != 'localhost')
+    USE_POSTGRES = bool(DATABASE_URL or (PGPASSWORD and PGHOST and PGHOST != "localhost") or db_config_filled)
 
 DATABASE_NAME = "shop_bot.db"  # Використовується тільки для SQLite
 

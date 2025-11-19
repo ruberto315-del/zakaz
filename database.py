@@ -61,13 +61,21 @@ class Database:
         """Ініціалізація PostgreSQL"""
         try:
             # Створюємо connection pool
-            # Використовуємо DATABASE_URL якщо є, інакше використовуємо окремі параметри
-            if self.db_url:
+            # Пріоритет: DB_CONFIG (якщо заповнений) > DATABASE_URL > окремі параметри
+            from config import DB_CONFIG
+            
+            # Перевіряємо чи DB_CONFIG заповнений
+            if DB_CONFIG.get('password') and DB_CONFIG.get('host'):
+                # Використовуємо DB_CONFIG (найвищий пріоритет)
+                logger.info(f"Підключення до PostgreSQL через DB_CONFIG: {DB_CONFIG['user']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")
+                self.pool = await asyncpg.create_pool(**DB_CONFIG, min_size=5, max_size=20)
+            elif self.db_url:
+                # Використовуємо DATABASE_URL
                 logger.info(f"Підключення до PostgreSQL через DATABASE_URL: {self.db_url.split('@')[1] if '@' in self.db_url else 'встановлено'}")
                 self.pool = await asyncpg.create_pool(self.db_url, min_size=5, max_size=20)
             else:
-                # Використовуємо окремі параметри
-                logger.info(f"Підключення до PostgreSQL: {DB_CONFIG['user']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")
+                # Використовуємо окремі параметри з змінних оточення
+                logger.info(f"Підключення до PostgreSQL через змінні оточення: {DB_CONFIG['user']}@{DB_CONFIG['host']}:{DB_CONFIG['port']}/{DB_CONFIG['database']}")
                 self.pool = await asyncpg.create_pool(**DB_CONFIG, min_size=5, max_size=20)
             logger.info("✅ Успішно підключено до бази даних")
             
