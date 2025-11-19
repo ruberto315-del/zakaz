@@ -22,8 +22,6 @@ class AdminStates(StatesGroup):
     editing_product_description = State()
     editing_product_price = State()
     editing_product_photo = State()
-    adding_faq_question = State()
-    adding_faq_answer = State()
 
 def is_admin(user_id: int) -> bool:
     """Перевірити чи користувач адмін"""
@@ -436,41 +434,4 @@ async def show_admin_preorders(message: Message):
     
     await message.answer(text, parse_mode="HTML")
 
-@router.message(F.text == "❓ Керування FAQ")
-async def manage_faq(message: Message, state: FSMContext):
-    """Керування FAQ"""
-    if not is_admin(message.from_user.id):
-        return
-    
-    await message.answer(
-        "❓ <b>Керування FAQ</b>\n\n"
-        "Введіть питання для нового FAQ:",
-        parse_mode="HTML"
-    )
-    await state.set_state(AdminStates.adding_faq_question)
-
-@router.message(AdminStates.adding_faq_question)
-async def process_faq_question(message: Message, state: FSMContext):
-    """Обробити питання FAQ"""
-    await state.update_data(question=message.text)
-    await message.answer("Введіть відповідь на питання:")
-    await state.set_state(AdminStates.adding_faq_answer)
-
-@router.message(AdminStates.adding_faq_answer)
-async def process_faq_answer(message: Message, state: FSMContext):
-    """Обробити відповідь FAQ"""
-    data = await state.get_data()
-    question = data['question']
-    answer = message.text
-    
-    faq_id = await db.add_faq(question, answer)
-    
-    await message.answer(
-        f"✅ FAQ додано!\n\n"
-        f"ID: {faq_id}\n"
-        f"Питання: {question}\n"
-        f"Відповідь: {answer}"
-    )
-    
-    await state.clear()
 
