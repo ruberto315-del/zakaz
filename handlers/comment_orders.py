@@ -177,7 +177,8 @@ async def handle_comment(message: Message):
             first_name = message.from_user.first_name
             
             admin_text = "🆕 <b>Новий користувач зареєстрований!</b>\n\n"
-            admin_text += f"🆔 ID: {user_id}\n"
+            # Використовуємо <code> для ID, щоб його можна було скопіювати
+            admin_text += f"🆔 ID: <code>{user_id}</code>\n"
             
             # Додаємо username або ім'я або тільки ID
             if username:

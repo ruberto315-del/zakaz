@@ -17,7 +17,8 @@ ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "testusername")
 DATABASE_URL = os.getenv("DATABASE_URL")
 
 # Окремі параметри для підключення до PostgreSQL (якщо DATABASE_URL не встановлено)
-PGUSER = os.getenv("PGUSER", "postgres")
+# Railway використовує POSTGRES_USER замість PGUSER
+PGUSER = os.getenv("POSTGRES_USER") or os.getenv("PGUSER", "postgres")
 PGPASSWORD = os.getenv("POSTGRES_PASSWORD", "") or os.getenv("PGPASSWORD", "")
 PGHOST = os.getenv("RAILWAY_PRIVATE_DOMAIN") or os.getenv("PGHOST", "localhost")
 PGPORT = os.getenv("PGPORT", "5432")

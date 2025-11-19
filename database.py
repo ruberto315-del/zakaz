@@ -72,127 +72,165 @@ class Database:
             logger.info("✅ Успішно підключено до бази даних")
             
             async with self.pool.acquire() as conn:
-                # Таблиця користувачів
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS users (
-                        user_id BIGINT PRIMARY KEY,
-                        username VARCHAR(255),
-                        first_name VARCHAR(255),
-                        phone VARCHAR(50),
-                        address TEXT,
-                        created_at TIMESTAMP DEFAULT NOW()
-                    )
-                """)
+                # Створюємо всі таблиці в транзакції
+                async with conn.transaction():
+                    # Таблиця користувачів
+                    logger.info("Створення таблиці users...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS users (
+                            user_id BIGINT PRIMARY KEY,
+                            username VARCHAR(255),
+                            first_name VARCHAR(255),
+                            phone VARCHAR(50),
+                            address TEXT,
+                            created_at TIMESTAMP DEFAULT NOW()
+                        )
+                    """)
+                    logger.info("✅ Таблиця users створена")
+                    
+                    # Таблиця товарів
+                    logger.info("Створення таблиці products...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS products (
+                            id SERIAL PRIMARY KEY,
+                            name VARCHAR(255) NOT NULL,
+                            description TEXT,
+                            price DECIMAL(10, 2) NOT NULL,
+                            photo_id VARCHAR(255),
+                            category VARCHAR(100),
+                            is_available BOOLEAN DEFAULT TRUE,
+                            is_preorder BOOLEAN DEFAULT FALSE,
+                            created_at TIMESTAMP DEFAULT NOW()
+                        )
+                    """)
+                    logger.info("✅ Таблиця products створена")
+                    
+                    # Таблиця корзини
+                    logger.info("Створення таблиці cart...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS cart (
+                            id SERIAL PRIMARY KEY,
+                            user_id BIGINT NOT NULL,
+                            product_id INTEGER NOT NULL,
+                            quantity INTEGER DEFAULT 1,
+                            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+                        )
+                    """)
+                    logger.info("✅ Таблиця cart створена")
+                    
+                    # Таблиця замовлень
+                    logger.info("Створення таблиці orders...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS orders (
+                            id SERIAL PRIMARY KEY,
+                            user_id BIGINT NOT NULL,
+                            status VARCHAR(50) DEFAULT 'pending',
+                            total_price DECIMAL(10, 2) NOT NULL,
+                            phone VARCHAR(50),
+                            address TEXT,
+                            receipt_photo_id VARCHAR(255),
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            updated_at TIMESTAMP DEFAULT NOW(),
+                            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
+                        )
+                    """)
+                    logger.info("✅ Таблиця orders створена")
+                    
+                    # Таблиця позицій замовлення
+                    logger.info("Створення таблиці order_items...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS order_items (
+                            id SERIAL PRIMARY KEY,
+                            order_id INTEGER NOT NULL,
+                            product_id INTEGER NOT NULL,
+                            quantity INTEGER NOT NULL,
+                            price DECIMAL(10, 2) NOT NULL,
+                            FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
+                            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+                        )
+                    """)
+                    logger.info("✅ Таблиця order_items створена")
+                    
+                    # Таблиця предзаказів
+                    logger.info("Створення таблиці preorders...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS preorders (
+                            id SERIAL PRIMARY KEY,
+                            user_id BIGINT NOT NULL,
+                            product_id INTEGER NOT NULL,
+                            quantity INTEGER DEFAULT 1,
+                            status VARCHAR(50) DEFAULT 'pending',
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
+                            FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
+                        )
+                    """)
+                    logger.info("✅ Таблиця preorders створена")
+                    
+                    # Таблиця FAQ
+                    logger.info("Створення таблиці faq...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS faq (
+                            id SERIAL PRIMARY KEY,
+                            question TEXT NOT NULL,
+                            answer TEXT NOT NULL,
+                            order_index INTEGER DEFAULT 0
+                        )
+                    """)
+                    logger.info("✅ Таблиця faq створена")
+                    
+                    # Таблиця активних постів для збору замовлень
+                    logger.info("Створення таблиці active_posts...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS active_posts (
+                            id SERIAL PRIMARY KEY,
+                            post_message_id BIGINT NOT NULL,
+                            chat_id BIGINT NOT NULL,
+                            admin_id BIGINT NOT NULL,
+                            is_active BOOLEAN DEFAULT TRUE,
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            finished_at TIMESTAMP
+                        )
+                    """)
+                    logger.info("✅ Таблиця active_posts створена")
+                    
+                    # Таблиця замовлень з коментарів
+                    logger.info("Створення таблиці comment_orders...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS comment_orders (
+                            id SERIAL PRIMARY KEY,
+                            post_id INTEGER NOT NULL,
+                            user_id BIGINT NOT NULL,
+                            position_number INTEGER NOT NULL,
+                            quantity INTEGER DEFAULT 1,
+                            comment_message_id BIGINT,
+                            created_at TIMESTAMP DEFAULT NOW(),
+                            FOREIGN KEY (post_id) REFERENCES active_posts(id) ON DELETE CASCADE
+                        )
+                    """)
+                    logger.info("✅ Таблиця comment_orders створена")
                 
-                # Таблиця товарів
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS products (
-                        id SERIAL PRIMARY KEY,
-                        name VARCHAR(255) NOT NULL,
-                        description TEXT,
-                        price DECIMAL(10, 2) NOT NULL,
-                        photo_id VARCHAR(255),
-                        category VARCHAR(100),
-                        is_available BOOLEAN DEFAULT TRUE,
-                        is_preorder BOOLEAN DEFAULT FALSE,
-                        created_at TIMESTAMP DEFAULT NOW()
-                    )
+                # Перевіряємо чи таблиці створені (після транзакції)
+                tables_check = await conn.fetch("""
+                    SELECT table_name 
+                    FROM information_schema.tables 
+                    WHERE table_schema = 'public'
+                    ORDER BY table_name
                 """)
+                table_names = [row['table_name'] for row in tables_check]
+                logger.info(f"✅ Всі таблиці PostgreSQL створені/перевірені. Знайдено таблиць: {len(table_names)}")
+                logger.info(f"📋 Список таблиць: {', '.join(table_names)}")
                 
-                # Таблиця корзини
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS cart (
-                        id SERIAL PRIMARY KEY,
-                        user_id BIGINT NOT NULL,
-                        product_id INTEGER NOT NULL,
-                        quantity INTEGER DEFAULT 1,
-                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-                    )
-                """)
-                
-                # Таблиця замовлень
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS orders (
-                        id SERIAL PRIMARY KEY,
-                        user_id BIGINT NOT NULL,
-                        status VARCHAR(50) DEFAULT 'pending',
-                        total_price DECIMAL(10, 2) NOT NULL,
-                        phone VARCHAR(50),
-                        address TEXT,
-                        receipt_photo_id VARCHAR(255),
-                        created_at TIMESTAMP DEFAULT NOW(),
-                        updated_at TIMESTAMP DEFAULT NOW(),
-                        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE
-                    )
-                """)
-                
-                # Таблиця позицій замовлення
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS order_items (
-                        id SERIAL PRIMARY KEY,
-                        order_id INTEGER NOT NULL,
-                        product_id INTEGER NOT NULL,
-                        quantity INTEGER NOT NULL,
-                        price DECIMAL(10, 2) NOT NULL,
-                        FOREIGN KEY (order_id) REFERENCES orders(id) ON DELETE CASCADE,
-                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-                    )
-                """)
-                
-                # Таблиця предзаказів
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS preorders (
-                        id SERIAL PRIMARY KEY,
-                        user_id BIGINT NOT NULL,
-                        product_id INTEGER NOT NULL,
-                        quantity INTEGER DEFAULT 1,
-                        status VARCHAR(50) DEFAULT 'pending',
-                        created_at TIMESTAMP DEFAULT NOW(),
-                        FOREIGN KEY (user_id) REFERENCES users(user_id) ON DELETE CASCADE,
-                        FOREIGN KEY (product_id) REFERENCES products(id) ON DELETE CASCADE
-                    )
-                """)
-                
-                # Таблиця FAQ
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS faq (
-                        id SERIAL PRIMARY KEY,
-                        question TEXT NOT NULL,
-                        answer TEXT NOT NULL,
-                        order_index INTEGER DEFAULT 0
-                    )
-                """)
-                
-                # Таблиця активних постів для збору замовлень
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS active_posts (
-                        id SERIAL PRIMARY KEY,
-                        post_message_id BIGINT NOT NULL,
-                        chat_id BIGINT NOT NULL,
-                        admin_id BIGINT NOT NULL,
-                        is_active BOOLEAN DEFAULT TRUE,
-                        created_at TIMESTAMP DEFAULT NOW(),
-                        finished_at TIMESTAMP
-                    )
-                """)
-                
-                # Таблиця замовлень з коментарів
-                await conn.execute("""
-                    CREATE TABLE IF NOT EXISTS comment_orders (
-                        id SERIAL PRIMARY KEY,
-                        post_id INTEGER NOT NULL,
-                        user_id BIGINT NOT NULL,
-                        position_number INTEGER NOT NULL,
-                        quantity INTEGER DEFAULT 1,
-                        comment_message_id BIGINT,
-                        created_at TIMESTAMP DEFAULT NOW(),
-                        FOREIGN KEY (post_id) REFERENCES active_posts(id) ON DELETE CASCADE
-                    )
-                """)
-                
-                logger.info("Таблиці PostgreSQL створені/перевірені")
+                # Перевіряємо наявність всіх необхідних таблиць
+                required_tables = ['users', 'products', 'cart', 'orders', 'order_items', 
+                                 'preorders', 'faq', 'active_posts', 'comment_orders']
+                missing_tables = [t for t in required_tables if t not in table_names]
+                if missing_tables:
+                    logger.error(f"❌ Відсутні таблиці: {', '.join(missing_tables)}")
+                else:
+                    logger.info("✅ Всі необхідні таблиці присутні")
         except Exception as e:
-            logger.error(f"Помилка ініціалізації PostgreSQL: {e}")
+            logger.error(f"❌ Помилка ініціалізації PostgreSQL: {e}", exc_info=True)
             raise
     
     async def _init_sqlite(self):
@@ -326,7 +364,27 @@ class Database:
             
             # Явно комітимо всі зміни
             await db.commit()
-            logger.info(f"SQLite база даних ініціалізована: {self.db_name}")
+            
+            # Перевіряємо чи таблиці створені
+            async with db.execute("""
+                SELECT name FROM sqlite_master 
+                WHERE type='table' AND name NOT LIKE 'sqlite_%'
+                ORDER BY name
+            """) as cursor:
+                tables = await cursor.fetchall()
+                table_names = [row[0] for row in tables]
+                logger.info(f"✅ SQLite база даних ініціалізована: {self.db_name}")
+                logger.info(f"📋 Знайдено таблиць: {len(table_names)}")
+                logger.info(f"📋 Список таблиць: {', '.join(table_names)}")
+                
+                # Перевіряємо наявність всіх необхідних таблиць
+                required_tables = ['users', 'products', 'cart', 'orders', 'order_items', 
+                                 'preorders', 'faq', 'active_posts', 'comment_orders']
+                missing_tables = [t for t in required_tables if t not in table_names]
+                if missing_tables:
+                    logger.error(f"❌ Відсутні таблиці: {', '.join(missing_tables)}")
+                else:
+                    logger.info("✅ Всі необхідні таблиці присутні")
     
     # Користувачі
     async def add_user(self, user_id, username=None, first_name=None):
@@ -360,6 +418,29 @@ class Database:
         # Користувач новий, додаємо
         if self.use_postgres:
             async with self.pool.acquire() as conn:
+                # Перевіряємо чи таблиця users існує, якщо ні - створюємо
+                table_exists = await conn.fetchval("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'users'
+                    )
+                """)
+                
+                if not table_exists:
+                    logger.warning("Таблиця users не знайдена, створюємо...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS users (
+                            user_id BIGINT PRIMARY KEY,
+                            username VARCHAR(255),
+                            first_name VARCHAR(255),
+                            phone VARCHAR(50),
+                            address TEXT,
+                            created_at TIMESTAMP DEFAULT NOW()
+                        )
+                    """)
+                    logger.info("✅ Таблиця users створена")
+                
                 await conn.execute("""
                     INSERT INTO users (user_id, username, first_name)
                     VALUES ($1, $2, $3)
@@ -446,11 +527,38 @@ class Database:
         """Додати товар"""
         if self.use_postgres:
             async with self.pool.acquire() as conn:
+                # Перевіряємо чи таблиця products існує, якщо ні - створюємо
+                table_exists = await conn.fetchval("""
+                    SELECT EXISTS (
+                        SELECT FROM information_schema.tables 
+                        WHERE table_schema = 'public' 
+                        AND table_name = 'products'
+                    )
+                """)
+                
+                if not table_exists:
+                    logger.warning("Таблиця products не знайдена, створюємо...")
+                    await conn.execute("""
+                        CREATE TABLE IF NOT EXISTS products (
+                            id SERIAL PRIMARY KEY,
+                            name VARCHAR(255) NOT NULL,
+                            description TEXT,
+                            price DECIMAL(10, 2) NOT NULL,
+                            photo_id VARCHAR(255),
+                            category VARCHAR(100),
+                            is_available BOOLEAN DEFAULT TRUE,
+                            is_preorder BOOLEAN DEFAULT FALSE,
+                            created_at TIMESTAMP DEFAULT NOW()
+                        )
+                    """)
+                    logger.info("✅ Таблиця products створена")
+                
                 product_id = await conn.fetchval("""
                     INSERT INTO products (name, description, price, photo_id, category, is_preorder)
                     VALUES ($1, $2, $3, $4, $5, $6)
                     RETURNING id
                 """, name, description, float(price), photo_id, category, is_preorder)
+                logger.info(f"Товар додано в PostgreSQL: ID={product_id}, name={name}")
                 return product_id
         else:
             _check_aiosqlite()

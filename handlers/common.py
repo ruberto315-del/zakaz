@@ -20,7 +20,8 @@ async def cmd_start(message: Message):
     if is_new_user and user_id != ADMIN_ID:
         bot = message.bot
         admin_text = "🆕 <b>Новий користувач зареєстрований!</b>\n\n"
-        admin_text += f"🆔 ID: {user_id}\n"
+        # Використовуємо <code> для ID, щоб його можна було скопіювати
+        admin_text += f"🆔 ID: <code>{user_id}</code>\n"
         
         # Додаємо username або ім'я або тільки ID
         if username:

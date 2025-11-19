@@ -60,12 +60,23 @@ async def show_product(callback: CallbackQuery):
     
     if product['photo_id']:
         await callback.message.delete()
-        await callback.message.answer_photo(
-            product['photo_id'],
-            caption=text,
-            reply_markup=keyboard,
-            parse_mode="HTML"
-        )
+        # Перевіряємо чи це URL (починається з http) або file_id
+        if product['photo_id'].startswith('http'):
+            # Це URL з postimages.org, відправляємо через URL
+            await callback.message.answer_photo(
+                product['photo_id'],
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
+        else:
+            # Це старий file_id (для сумісності)
+            await callback.message.answer_photo(
+                product['photo_id'],
+                caption=text,
+                reply_markup=keyboard,
+                parse_mode="HTML"
+            )
     else:
         await callback.message.edit_text(
             text,
