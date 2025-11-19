@@ -235,14 +235,18 @@ async def process_edit_photo(message: Message, state: FSMContext):
     # Завантажуємо фото на postimages.org
     await message.answer("📤 Завантаження фото на сервер...")
     from postimages_upload import upload_telegram_photo_to_postimages
+    import logging
+    logger = logging.getLogger(__name__)
+    
     photo_url = await upload_telegram_photo_to_postimages(message.bot, photo_id)
     
     if not photo_url:
-        await message.answer("❌ Помилка завантаження фото. Спробуйте ще раз.")
-        return
+        # Якщо завантаження на postimages не вдалося, використовуємо file_id як резервний варіант
+        logger.warning(f"Не вдалося завантажити фото на postimages.org, використовуємо file_id: {photo_id}")
+        photo_url = photo_id  # Використовуємо file_id як резервний варіант
     
-    # Зберігаємо посилання замість file_id
-    await db.update_product(product_id, photo_id=photo_url)  # Тепер це URL
+    # Зберігаємо посилання замість file_id (або file_id якщо завантаження не вдалося)
+    await db.update_product(product_id, photo_id=photo_url)  # Тепер це URL або file_id
     await message.answer("✅ Фото оновлено!")
     await state.clear()
 
