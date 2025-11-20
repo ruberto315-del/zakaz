@@ -7,14 +7,14 @@ from aiogram import Router, F
 from aiogram.types import Message
 from aiogram.filters import Command
 from database import db
-from config import ADMIN_ID
+from config import ADMIN_ID, ADMIN_IDS
 
 logger = logging.getLogger(__name__)
 router = Router()
 
 def is_admin(user_id: int) -> bool:
     """Перевірити чи користувач адміністратор"""
-    return user_id == ADMIN_ID
+    return user_id in ADMIN_IDS
 
 def extract_position_numbers(text: str) -> list:
     """Витягнути номери позицій з тексту

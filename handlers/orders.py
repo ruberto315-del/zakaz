@@ -4,7 +4,7 @@ from aiogram.fsm.context import FSMContext
 from aiogram.fsm.state import State, StatesGroup
 from keyboards import get_orders_keyboard, get_main_menu
 from database import db
-from config import ORDER_STATUSES, ADMIN_ID, ADMIN_USERNAME
+from config import ORDER_STATUSES, ADMIN_ID, ADMIN_IDS, ADMIN_USERNAME
 
 router = Router()
 

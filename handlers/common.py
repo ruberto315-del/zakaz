@@ -3,7 +3,7 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.filters import Command
 from keyboards import get_main_menu, get_admin_menu
 from database import db
-from config import ADMIN_ID
+from config import ADMIN_ID, ADMIN_IDS
 
 router = Router()
 
@@ -17,7 +17,7 @@ async def cmd_start(message: Message):
     is_new_user = await db.add_user(user_id, username, first_name)
     
     # Відправити сповіщення адміну про нового користувача
-    if is_new_user and user_id != ADMIN_ID:
+    if is_new_user and user_id not in ADMIN_IDS:
         bot = message.bot
         admin_text = "🆕 <b>Новий користувач зареєстрований!</b>\n\n"
         # Використовуємо <code> для ID, щоб його можна було скопіювати
@@ -37,7 +37,7 @@ async def cmd_start(message: Message):
             logger = logging.getLogger(__name__)
             logger.error(f"Помилка відправки сповіщення про нового користувача адміну: {e}")
     
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         await message.answer(
             "👋 Вітаю, адміністратор!\n\n"
             "Оберіть дію:",
@@ -54,7 +54,7 @@ async def cmd_start(message: Message):
 async def main_menu(message: Message):
     """Повернення до головного меню"""
     user_id = message.from_user.id
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         await message.answer("Головне меню:", reply_markup=get_admin_menu())
     else:
         await message.answer("Головне меню:", reply_markup=get_main_menu())
@@ -63,7 +63,7 @@ async def main_menu(message: Message):
 async def main_menu_callback(callback: CallbackQuery):
     """Повернення до головного меню через callback"""
     user_id = callback.from_user.id
-    if user_id == ADMIN_ID:
+    if user_id in ADMIN_IDS:
         await callback.message.answer("Головне меню:", reply_markup=get_admin_menu())
     else:
         await callback.message.answer("Головне меню:", reply_markup=get_main_menu())

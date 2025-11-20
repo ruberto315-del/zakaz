@@ -6,8 +6,14 @@ load_dotenv()
 # Токен бота
 BOT_TOKEN = os.getenv("BOT_TOKEN", "8264290134:AAGdDjDFrwYxrrHqDw3Fbj1FjwGg9g30Mhs")
 
-# ID адміністратора
+# ID адміністратора (основний)
 ADMIN_ID = int(os.getenv("ADMIN_ID", "810944378"))
+
+# Список ID адміністраторів
+ADMIN_IDS = [
+    ADMIN_ID,
+    356379093  # Другий адміністратор
+]
 
 # Username адміністратора для зв'язку
 ADMIN_USERNAME = os.getenv("ADMIN_USERNAME", "testusername")

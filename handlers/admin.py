@@ -9,7 +9,7 @@ from keyboards import (
     get_cancel_add_product_keyboard
 )
 from database import db
-from config import ADMIN_ID, ORDER_STATUSES
+from config import ADMIN_ID, ADMIN_IDS, ORDER_STATUSES
 from notifications import send_order_status_notification
 import logging
 
@@ -30,7 +30,7 @@ class AdminStates(StatesGroup):
 
 def is_admin(user_id: int) -> bool:
     """Перевірити чи користувач адмін"""
-    return user_id == ADMIN_ID
+    return user_id in ADMIN_IDS
 
 
 @router.message(F.text == "➕ Додати товар")
